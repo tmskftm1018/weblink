@@ -1,0 +1,112 @@
+services:
+  web:
+    build:
+      context: ./apps/web
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+    ports:
+      - "${WEB_PORT:-5173}:5173"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  api:
+    build:
+      context: ./apps/api
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://weblink:change-me-for-local-development@postgres:5432/weblink}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      SESSION_DURATION_DAYS: ${SESSION_DURATION_DAYS:-7}
+      WEB_ORIGINS: ${WEB_ORIGINS:-["http://localhost:5173"]}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-http://localhost:8000/api/v1/connections/google/oauth/callback}
+      CONNECTION_ENCRYPTION_KEY: ${CONNECTION_ENCRYPTION_KEY:-}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  worker:
+    build:
+      context: ./apps/worker
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://weblink:change-me-for-local-development@postgres:5432/weblink}
+      RUNTIME_IMAGE: weblink-python-runtime:local
+      RUN_TIMEOUT_SECONDS: ${RUN_TIMEOUT_SECONDS:-8}
+      RUN_MEMORY_MB: ${RUN_MEMORY_MB:-96}
+      RUN_CPU_NANOS: ${RUN_CPU_NANOS:-500000000}
+      RUN_MAX_OUTPUT_CHARS: ${RUN_MAX_OUTPUT_CHARS:-16384}
+      WORKER_LEASE_SECONDS: ${WORKER_LEASE_SECONDS:-30}
+      CONNECTION_ENCRYPTION_KEY: ${CONNECTION_ENCRYPTION_KEY:-}
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+      runtime-image:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "uv", "run", "--no-sync", "python", "-m", "app.healthcheck"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+
+  runtime-image:
+    image: weblink-python-runtime:local
+    build:
+      context: .
+      dockerfile: infrastructure/runtime/python.Dockerfile
+    command: ["true"]
+    restart: "no"
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-weblink}
+      POSTGRES_USER: ${POSTGRES_USER:-weblink}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-for-local-development}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  object-storage:
+    profiles: ["storage"]
+    image: quay.io/minio/minio:RELEASE.2025-09-06T17-38-46Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-weblink}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-change-me-for-local-development}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - object_storage_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  object_storage_data:
