@@ -172,9 +172,9 @@ h1 { max-width: 660px; margin: 0; font: 700 clamp(38px, 6vw, 62px)/1.08 'Segoe U
 .sample-project-start p, .sample-project-start small { margin: 0; color: #68766b; font-size: 11px; line-height: 1.5; }
 .sample-project-start .secondary-button { min-height: 36px; padding: 8px 12px; font-size: 12px; }
 .project-create-form label { display: grid; gap: 7px; color: #455449; font-size: 12px; font-weight: 600; }
-.project-create-form input, .project-create-form textarea, .new-file-form input { width: 100%; padding: 11px 12px; border: 1px solid #dce3dc; border-radius: 9px; outline: none; background: #fff; color: #202921; font: 13px 'Segoe UI', sans-serif; }
+.project-create-form input, .project-create-form textarea, .new-entry-form input, .new-entry-form select { width: 100%; padding: 11px 12px; border: 1px solid #dce3dc; border-radius: 9px; outline: none; background: #fff; color: #202921; font: 13px 'Segoe UI', sans-serif; }
 .project-create-form textarea { resize: vertical; }
-.project-create-form input:focus, .project-create-form textarea:focus, .new-file-form input:focus { border-color: #518767; box-shadow: 0 0 0 3px #51876720; }
+.project-create-form input:focus, .project-create-form textarea:focus, .new-entry-form input:focus, .new-entry-form select:focus { border-color: #518767; box-shadow: 0 0 0 3px #51876720; }
 .workspace-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
 .workspace-heading h1 { margin-top: 13px; font-size: 35px; }
 .workspace-heading p { margin: 8px 0 0; color: #849087; font-size: 12px; }
@@ -216,15 +216,35 @@ h1 { max-width: 660px; margin: 0; font: 700 clamp(38px, 6vw, 62px)/1.08 'Segoe U
 .file-row span { color: #8a9a8d; }
 .file-row .file-row-path { min-width: 0; overflow: hidden; color: inherit; text-overflow: ellipsis; white-space: nowrap; }
 .file-row.active { background: #eaf2e9; color: #285c3d; font-weight: 700; }
+.file-folder { min-width: 0; }
+.file-folder-heading { display: flex; align-items: flex-start; gap: 2px; }
+.file-folder-heading > details { min-width: 0; flex: 1; }
+.file-folder-summary { min-width: 0; display: flex; align-items: center; gap: 6px; padding: 7px 6px; border-radius: 7px; color: #5d6c60; cursor: pointer; font-size: 11px; list-style: none; }
+.file-folder-summary::-webkit-details-marker { display: none; }
+.file-folder-summary:hover { background: #f0f4ef; }
+.file-folder-caret { width: 9px; color: #8a9a8d; font-size: 16px; line-height: 10px; transition: transform .12s ease; }
+.file-folder-heading details[open] > .file-folder-summary .file-folder-caret { transform: rotate(90deg); }
+.file-folder-icon { color: #bc9a57; }
+.file-folder-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-folder-children { margin-left: 10px; padding-left: 5px; border-left: 1px solid #e3eae3; }
+.file-folder-drop-target { border-radius: 7px; background: #e8f3e9; outline: 1px dashed #579269; }
+.project-file-root-drop { min-height: 32px; margin: 2px 0 8px; padding: 5px; border: 1px dashed #d8e2d8; border-radius: 8px; transition: background .12s ease, border-color .12s ease; }
+.project-file-root-drop-active { border-color: #579269; background: #e8f3e9; }
+.project-file-root-label { display: flex; align-items: baseline; justify-content: space-between; gap: 5px; padding: 2px 4px 5px; color: #526458; font-size: 10px; font-weight: 700; }
+.project-file-root-label small { color: #7b897e; font-size: 9px; font-weight: 400; }
+.file-row[draggable="true"] { cursor: grab; }
+.file-row[draggable="true"]:active { cursor: grabbing; }
 .file-entry-actions { display: flex; flex: 0 0 auto; opacity: 0; transition: opacity .12s ease; }
 .file-entry:hover .file-entry-actions, .file-entry:focus-within .file-entry-actions { opacity: 1; }
 .file-entry-actions button { width: 24px; height: 25px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 5px; background: transparent; color: #738076; cursor: pointer; font: 14px/1 'Segoe UI', sans-serif; }
 .file-entry-actions button:hover { background: #e3ebe2; color: #2b6540; }
 .file-entry-actions button:last-child:hover { color: #a6473e; }
 .file-entry-actions button:disabled { cursor: not-allowed; opacity: .35; }
-.new-file-form { display: flex; gap: 5px; margin: 12px 4px 20px; }
-.new-file-form input { min-width: 0; padding: 8px; font-size: 11px; }
-.new-file-form button { padding: 0 9px; border: 1px solid #dce3dc; border-radius: 7px; background: white; color: #506254; cursor: pointer; font-size: 11px; }
+.new-entry-form { display: grid; gap: 8px; margin: 12px 4px 20px; padding: 11px; border: 1px solid #e1e8e0; border-radius: 9px; background: #fff; }
+.new-entry-form label { display: grid; gap: 5px; color: #546257; font-size: 10px; font-weight: 600; }
+.new-entry-form input, .new-entry-form select { min-width: 0; padding: 8px; font-size: 11px; }
+.new-entry-form p { margin: 0; color: #7a867d; font-size: 10px; line-height: 1.5; }
+.new-entry-form .primary-button { width: 100%; min-height: 34px; margin: 0; padding: 8px; font-size: 11px; }
 .revision-label { margin-top: 20px; }
 .run-output { margin: 14px 0; padding: 14px; border: 1px solid #dfe6df; border-radius: 10px; background: #17231d; color: #e6f2e9; }
 .run-output-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

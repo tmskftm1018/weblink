@@ -4,9 +4,45 @@ import { AttemptResult, Course, Lesson, learningService } from '../services/lear
 import { connectionService, GoogleConnectionStatus, GoogleSheetValues } from '../services/connections'
 import { ProjectSummary, ProjectVersion, ProjectVersionDetails, ProjectWorkspace, projectService } from '../services/projects'
 import { bindProjectDirectory, chooseProjectDirectory, getProjectDirectory, moveProjectFileInDirectory, ProjectDirectory, readProjectDirectory, removeProjectFileFromDirectory, unbindProjectDirectory, writeProjectDirectory } from '../services/localProjects'
+import ProjectFileTree, { buildProjectFileTree } from './ProjectFileTree'
 
 type Mode = 'login' | 'signup'
 type View = 'lesson' | 'projects' | 'workspace' | 'connections'
+type NewProjectEntryKind = 'auto' | 'file' | 'folder'
+
+function inferProjectEntryKind(path: string): Exclude<NewProjectEntryKind, 'auto'> {
+  const name = path.replace(/\\/g, '/').split('/').pop()?.trim() ?? ''
+  const extensionlessFiles = new Set(['dockerfile', 'makefile', 'license', 'procfile', 'gemfile', 'justfile'])
+  if (extensionlessFiles.has(name.toLocaleLowerCase()) || name.startsWith('.')) return 'file'
+  return name.lastIndexOf('.') > 0 ? 'file' : 'folder'
+}
+
+function uniqueProjectPath(path: string, files: ProjectWorkspace['files'], kind: Exclude<NewProjectEntryKind, 'auto'>): string {
+  const normalized = path.replace(/\\/g, '/').replace(/\/+$/g, '')
+  const segments = normalized.split('/')
+  const name = segments.pop() ?? ''
+  const parent = segments.join('/')
+  const lower = (value: string) => value.toLocaleLowerCase()
+  if (parent && files.some((file) => lower(file.path) === lower(parent) || lower(parent).startsWith(`${lower(file.path)}/`))) {
+    throw new Error(`‘${parent}’ 경로에 같은 이름의 파일이 있어 그 안에 항목을 만들 수 없습니다.`)
+  }
+  const conflicts = (candidate: string) => files.some((file) => {
+    const existing = lower(file.path)
+    const current = lower(candidate)
+    return existing === current || (kind === 'folder' && existing.startsWith(`${current}/`))
+      || (kind === 'file' && existing.startsWith(`${current}/`))
+  })
+  if (!conflicts(normalized)) return normalized
+  const dot = kind === 'file' ? name.lastIndexOf('.') : -1
+  const stem = dot > 0 ? name.slice(0, dot) : name
+  const extension = dot > 0 ? name.slice(dot) : ''
+  for (let suffix = 2; suffix < 10_000; suffix += 1) {
+    const candidateName = `${stem} (${suffix})${extension}`
+    const candidate = parent ? `${parent}/${candidateName}` : candidateName
+    if (!conflicts(candidate)) return candidate
+  }
+  throw new Error('같은 이름의 항목이 너무 많아 새 이름을 정하지 못했습니다.')
+}
 
 const MonacoCodeEditor = lazy(() => import('./MonacoCodeEditor'))
 
@@ -67,8 +103,9 @@ export default function App() {
   const [openFilePaths, setOpenFilePaths] = useState<string[]>([])
   const [newProjectName, setNewProjectName] = useState('')
   const [newProjectDescription, setNewProjectDescription] = useState('')
-  const [newFilePath, setNewFilePath] = useState('')
-  const [showNewFileForm, setShowNewFileForm] = useState(false)
+  const [newEntryPath, setNewEntryPath] = useState('')
+  const [newEntryKind, setNewEntryKind] = useState<NewProjectEntryKind>('auto')
+  const [showNewEntryForm, setShowNewEntryForm] = useState(false)
   const [projectBusy, setProjectBusy] = useState(false)
   const [projectDirty, setProjectDirty] = useState(false)
   const [projectNeedsReload, setProjectNeedsReload] = useState(false)
@@ -84,6 +121,7 @@ export default function App() {
     const query = projectSearch.trim().toLocaleLowerCase()
     return projects.filter((project) => `${project.name} ${project.description}`.toLocaleLowerCase().includes(query))
   }, [projects, projectSearch])
+  const projectFileTree = useMemo(() => buildProjectFileTree(workspace?.files ?? []), [workspace?.files])
   const blockPalette = useMemo(() => {
     const blocks = lesson?.content.block_activity?.blocks ?? []
     const shuffled = [...blocks]
@@ -679,6 +717,95 @@ export default function App() {
     setOpenFilePaths(path ? [path] : [])
   }
 
+  async function createProjectEntry(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const kind = newEntryKind === 'auto' ? inferProjectEntryKind(newEntryPath) : newEntryKind
+    if (kind === 'folder') await createProjectFolder(newEntryPath)
+    else await addProjectFile(newEntryPath)
+  }
+
+  async function createProjectFolder(folderPathInput: string) {
+    if (!workspace) return
+    const folderPath = folderPathInput.trim().replace(/\\/g, '/').replace(/\/+$/g, '')
+    if (!folderPath || folderPath.length > 230 || folderPath.startsWith('/') || folderPath.includes('\0')
+      || folderPath.split('/').some((part) => !part || part === '.' || part === '..' || part.toLowerCase() === '.git')) {
+      setProjectError('폴더 경로는 230자 이내의 안전한 상대 경로여야 합니다.')
+      return
+    }
+    let uniqueFolderPath: string
+    try {
+      uniqueFolderPath = uniqueProjectPath(folderPath, workspace.files, 'folder')
+    } catch (cause) {
+      setProjectError(cause instanceof Error ? cause.message : '폴더 이름을 정하지 못했습니다.')
+      return
+    }
+    const markerPath = `${uniqueFolderPath}/.gitkeep`
+    if (workspace.files.length >= 50) {
+      setProjectError('프로젝트 파일과 폴더 표시 파일을 합쳐 50개까지만 저장할 수 있습니다.')
+      return
+    }
+    setProjectBusy(true)
+    setProjectError('')
+    try {
+      const marker = { path: markerPath, content: '' }
+      if (localProjectDirectory) await writeProjectDirectory(localProjectDirectory, [marker])
+      setWorkspace({ ...workspace, files: [...workspace.files, marker].sort((a, b) => a.path.localeCompare(b.path)) })
+      setProjectDirty(true)
+      setNewEntryPath('')
+      setNewEntryKind('auto')
+      setShowNewEntryForm(false)
+      setProjectNotice(uniqueFolderPath === folderPath
+        ? `‘${uniqueFolderPath}’ 폴더를 만들었습니다. 파일을 끌어다 놓거나 +에서 경로를 입력해 파일을 만들 수 있어요.`
+        : `같은 이름이 있어 ‘${uniqueFolderPath}’ 폴더를 만들었습니다.`)
+    } catch (cause) {
+      setProjectError(cause instanceof Error ? cause.message : '폴더를 만들지 못했습니다.')
+    } finally {
+      setProjectBusy(false)
+    }
+  }
+
+  async function moveProjectFileToFolder(filePath: string, folderPath: string) {
+    if (!workspace) return
+    const filename = filePath.split('/').pop()
+    const requestedPath = filename ? (folderPath ? `${folderPath}/${filename}` : filename) : ''
+    if (!requestedPath || requestedPath === filePath) return
+    const file = workspace.files.find((item) => item.path === filePath)
+    if (!file) return
+    let newPath: string
+    try {
+      newPath = uniqueProjectPath(requestedPath, workspace.files.filter((item) => item.path !== filePath), 'file')
+    } catch (cause) {
+      setProjectError(cause instanceof Error ? cause.message : '파일 이름을 정하지 못했습니다.')
+      return
+    }
+    if (filePath === 'main.py' && !window.confirm('main.py를 폴더로 옮기면 루트에 main.py가 없어 프로젝트를 실행할 수 없어요. 나중에 루트에 main.py를 다시 만들면 실행할 수 있습니다. 계속 이동할까요?')) return
+    const markerPath = folderPath ? `${folderPath}/.gitkeep` : ''
+    const hasFolderMarker = Boolean(markerPath) && workspace.files.some((item) => item.path === markerPath)
+    setProjectBusy(true)
+    setProjectError('')
+    try {
+      if (localProjectDirectory) {
+        await moveProjectFileInDirectory(localProjectDirectory, filePath, newPath, file.content)
+        if (hasFolderMarker) await removeProjectFileFromDirectory(localProjectDirectory, markerPath).catch(() => undefined)
+      }
+      const files = workspace.files
+        .filter((item) => item.path !== filePath && (!markerPath || item.path !== markerPath))
+        .concat({ ...file, path: newPath })
+        .sort((left, right) => left.path.localeCompare(right.path))
+      setWorkspace({ ...workspace, files })
+      setSelectedPath((current) => current === filePath ? newPath : current)
+      setOpenFilePaths((current) => current.map((path) => path === filePath ? newPath : path))
+      setProjectDirty(true)
+      setProjectNotice(newPath === requestedPath
+        ? `‘${filePath}’ 파일을 ‘${newPath}’로 옮겼습니다. 초안을 저장하면 WebLink에도 적용됩니다.`
+        : `같은 이름이 있어 ‘${filePath}’ 파일을 ‘${newPath}’로 옮겼습니다.`)
+    } catch (cause) {
+      setProjectError(cause instanceof Error ? cause.message : '파일을 폴더로 옮기지 못했습니다.')
+    } finally {
+      setProjectBusy(false)
+    }
+  }
+
   function closeProjectFile(path: string) {
     const nextOpenPaths = openFilePaths.filter((item) => item !== path)
     setOpenFilePaths(nextOpenPaths)
@@ -847,36 +974,112 @@ export default function App() {
     if (workspace) await deleteProjectById(workspace.id, workspace.name)
   }
 
-  function addProjectFile(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!workspace || !newFilePath.trim()) return
-    const path = newFilePath.trim().replace(/\\/g, '/')
+  async function addProjectFile(pathInput: string) {
+    if (!workspace || !pathInput.trim()) return
+    const path = pathInput.trim().replace(/\\/g, '/')
     if (path.length > 240 || path.startsWith('/') || path.includes('\0') || path.split('/').some((part) => !part || part === '.' || part === '..')) {
       setProjectError('파일 경로는 240자 이내의 안전한 상대 경로여야 합니다.')
       return
     }
-    if (workspace.files.some((file) => file.path === path)) {
-      setProjectError('같은 경로의 파일이 이미 있습니다.')
+    if (path.split('/').pop()?.toLowerCase() === '.gitkeep') {
+      setProjectError('.gitkeep은 폴더를 보존하기 위해 WebLink가 관리하는 파일입니다.')
       return
     }
     if (workspace.files.length >= 50) {
       setProjectError('프로젝트 파일은 50개까지만 추가할 수 있습니다.')
       return
     }
-    setWorkspace({ ...workspace, files: [...workspace.files, { path, content: '' }].sort((a, b) => a.path.localeCompare(b.path)) })
-    openProjectFile(path)
-    setNewFilePath('')
-    setShowNewFileForm(false)
-    setProjectDirty(true)
+    let uniquePath: string
+    try {
+      uniquePath = uniqueProjectPath(path, workspace.files, 'file')
+    } catch (cause) {
+      setProjectError(cause instanceof Error ? cause.message : '파일 이름을 정하지 못했습니다.')
+      return
+    }
+    const parentFolder = uniquePath.split('/').slice(0, -1).join('/')
+    const markerPath = parentFolder ? `${parentFolder}/.gitkeep` : ''
+    setProjectBusy(true)
     setProjectError('')
-    setProjectNotice('새 파일이 추가되었습니다. 저장해 주세요.')
+    try {
+      if (localProjectDirectory) {
+        await writeProjectDirectory(localProjectDirectory, [{ path: uniquePath, content: '' }])
+        if (markerPath && workspace.files.some((file) => file.path === markerPath)) {
+          await removeProjectFileFromDirectory(localProjectDirectory, markerPath).catch(() => undefined)
+        }
+      }
+      const files = workspace.files.filter((file) => !markerPath || file.path !== markerPath)
+      setWorkspace({ ...workspace, files: [...files, { path: uniquePath, content: '' }].sort((a, b) => a.path.localeCompare(b.path)) })
+      openProjectFile(uniquePath)
+      setNewEntryPath('')
+      setNewEntryKind('auto')
+      setShowNewEntryForm(false)
+      setProjectDirty(true)
+      setProjectNotice(uniquePath === path ? '새 파일이 추가되었습니다. 저장해 주세요.' : `같은 이름이 있어 ‘${uniquePath}’ 파일로 만들었습니다.`)
+    } catch (cause) {
+      setProjectError(cause instanceof Error ? cause.message : '새 파일을 추가하지 못했습니다.')
+    } finally {
+      setProjectBusy(false)
+    }
+  }
+
+  async function importDroppedFiles(droppedFiles: File[], folderPath: string) {
+    if (!workspace || !droppedFiles.length) return
+    const folderMarker = folderPath ? `${folderPath}/.gitkeep` : ''
+    const existingFiles = workspace.files.filter((file) => !folderMarker || file.path !== folderMarker)
+    if (existingFiles.length + droppedFiles.length > 50) {
+      setProjectError('프로젝트에는 폴더 표시 파일을 포함해 최대 50개까지만 넣을 수 있어요.')
+      return
+    }
+    setProjectBusy(true)
+    setProjectError('')
+    try {
+      const decoder = new TextDecoder('utf-8', { fatal: true })
+      const addedFiles: ProjectWorkspace['files'] = []
+      let incomingBytes = 0
+      for (const file of droppedFiles) {
+        const name = file.name.trim()
+        const lowerName = name.toLocaleLowerCase()
+        const sensitive = lowerName === '.env' || (lowerName.startsWith('.env.') && lowerName !== '.env.example')
+          || ['id_rsa', 'id_ed25519', 'credentials.json', 'service-account.json'].includes(lowerName)
+          || /\.(pem|key|p12|pfx)$/i.test(name)
+        if (!name || name.includes('/') || name.includes('\\') || name.includes('\0') || name === '.' || name === '..'
+          || lowerName === '.git' || lowerName === '.gitkeep') {
+          throw new Error(`‘${name || '이름 없는 파일'}’은 프로젝트에 넣을 수 없는 이름입니다.`)
+        }
+        if (sensitive) throw new Error(`‘${name}’은 비밀 정보가 포함될 수 있어 가져오지 않았습니다.`)
+        if (file.size > 200_000) throw new Error(`‘${name}’ 파일이 200KB를 넘어 가져올 수 없습니다.`)
+        incomingBytes += file.size
+        const path = folderPath ? `${folderPath}/${name}` : name
+        let content: string
+        try {
+          content = decoder.decode(await file.arrayBuffer())
+        } catch {
+          throw new Error(`‘${name}’은 UTF-8 텍스트가 아니어서 가져올 수 없습니다.`)
+        }
+        const uniquePath = uniqueProjectPath(path, [...existingFiles, ...addedFiles], 'file')
+        addedFiles.push({ path: uniquePath, content })
+      }
+      const currentBytes = existingFiles.reduce((sum, file) => sum + new TextEncoder().encode(file.content).byteLength, 0)
+      if (currentBytes + incomingBytes > 1_000_000) throw new Error('프로젝트 파일 전체 용량은 1MB까지 지원합니다.')
+      if (localProjectDirectory) {
+        await writeProjectDirectory(localProjectDirectory, addedFiles)
+        if (folderMarker && workspace.files.some((file) => file.path === folderMarker)) {
+          await removeProjectFileFromDirectory(localProjectDirectory, folderMarker).catch(() => undefined)
+        }
+      }
+      setWorkspace({ ...workspace, files: [...existingFiles, ...addedFiles].sort((left, right) => left.path.localeCompare(right.path)) })
+      openProjectFile(addedFiles[0]?.path ?? '')
+      setProjectDirty(true)
+      setProjectNotice(`${addedFiles.length}개 파일을 ${folderPath ? `‘${folderPath}’ 폴더` : '프로젝트 루트'}에 추가했습니다. 저장하면 WebLink 초안에도 적용됩니다.`)
+    } catch (cause) {
+      setProjectError(cause instanceof Error ? cause.message : '파일을 프로젝트에 추가하지 못했습니다.')
+    } finally {
+      setProjectBusy(false)
+    }
   }
 
   async function renameProjectFile(oldPath: string) {
-    if (!workspace || oldPath === 'main.py') {
-      setProjectError('프로젝트 실행에 필요한 main.py 파일은 이름을 바꿀 수 없습니다.')
-      return
-    }
+    if (!workspace) return
     const entered = window.prompt('새 파일 경로를 입력하세요.', oldPath)
     if (entered === null) return
     const newPath = entered.trim().replace(/\\/g, '/')
@@ -886,23 +1089,29 @@ export default function App() {
       return
     }
     if (newPath === oldPath) return
-    if (workspace.files.some((file) => file.path === newPath)) {
-      setProjectError('같은 경로의 파일이 이미 있습니다.')
-      return
-    }
     const file = workspace.files.find((item) => item.path === oldPath)
     if (!file) return
+    let finalPath: string
+    try {
+      finalPath = uniqueProjectPath(newPath, workspace.files.filter((item) => item.path !== oldPath), 'file')
+    } catch (cause) {
+      setProjectError(cause instanceof Error ? cause.message : '파일 이름을 정하지 못했습니다.')
+      return
+    }
+    if (oldPath === 'main.py' && !window.confirm('main.py 이름을 바꾸면 루트에 main.py가 없어 프로젝트를 실행할 수 없어요. 루트에 main.py를 다시 만들면 실행할 수 있습니다. 계속할까요?')) return
     setProjectBusy(true)
     setProjectError('')
     try {
-      if (localProjectDirectory) await moveProjectFileInDirectory(localProjectDirectory, oldPath, newPath, file.content)
-      setWorkspace({ ...workspace, files: workspace.files.map((item) => item.path === oldPath ? { ...item, path: newPath } : item).sort((a, b) => a.path.localeCompare(b.path)) })
-      setSelectedPath((current) => current === oldPath ? newPath : current)
-      setOpenFilePaths((current) => current.map((path) => path === oldPath ? newPath : path))
+      if (localProjectDirectory) await moveProjectFileInDirectory(localProjectDirectory, oldPath, finalPath, file.content)
+      setWorkspace({ ...workspace, files: workspace.files.map((item) => item.path === oldPath ? { ...item, path: finalPath } : item).sort((a, b) => a.path.localeCompare(b.path)) })
+      setSelectedPath((current) => current === oldPath ? finalPath : current)
+      setOpenFilePaths((current) => current.map((path) => path === oldPath ? finalPath : path))
       setProjectDirty(true)
-      setProjectNotice(localProjectDirectory
-        ? `${oldPath}의 이름을 ${newPath}(으)로 바꾸고 연결 폴더에도 반영했습니다. 저장하면 WebLink 초안에 적용됩니다.`
-        : `${oldPath}의 이름을 ${newPath}(으)로 바꿨습니다. 저장하면 WebLink 초안에 적용됩니다.`)
+      setProjectNotice(finalPath !== newPath
+        ? `같은 이름이 있어 ‘${finalPath}’로 변경했습니다.`
+        : localProjectDirectory
+          ? `${oldPath}의 이름을 ${finalPath}(으)로 바꾸고 연결 폴더에도 반영했습니다. 저장하면 WebLink 초안에 적용됩니다.`
+          : `${oldPath}의 이름을 ${finalPath}(으)로 바꿨습니다. 저장하면 WebLink 초안에 적용됩니다.`)
     } catch (cause) {
       setProjectError(cause instanceof Error ? cause.message : '파일 이름을 바꾸지 못했습니다.')
     } finally {
@@ -912,13 +1121,10 @@ export default function App() {
 
   async function deleteProjectFile(path: string) {
     if (!workspace) return
-    if (path === 'main.py') {
-      setProjectError('프로젝트 실행에 필요한 main.py 파일은 삭제할 수 없습니다.')
-      return
-    }
+    const mainWarning = path === 'main.py' ? ' 루트 main.py가 없어 프로젝트를 실행할 수 없으며, 다시 만들면 실행할 수 있습니다.' : ''
     const prompt = localProjectDirectory
-      ? `‘${path}’ 파일을 WebLink 초안과 연결된 컴퓨터 폴더에서 삭제할까요? GitHub에 올라간 파일은 직접 커밋하기 전까지 그대로 유지됩니다.`
-      : `‘${path}’ 파일을 WebLink 프로젝트 초안에서 삭제할까요?`
+      ? `‘${path}’ 파일을 WebLink 초안과 연결된 컴퓨터 폴더에서 삭제할까요? GitHub에 올라간 파일은 직접 커밋하기 전까지 그대로 유지됩니다.${mainWarning}`
+      : `‘${path}’ 파일을 WebLink 프로젝트 초안에서 삭제할까요?${mainWarning}`
     if (!window.confirm(prompt)) return
     setProjectBusy(true)
     setProjectError('')
@@ -1124,6 +1330,10 @@ export default function App() {
 
   async function runProject() {
     if (!workspace) return
+    if (!workspace.files.some((file) => file.path === 'main.py')) {
+      setProjectError('프로젝트를 실행하려면 루트에 main.py 파일이 있어야 합니다. + 버튼에서 main.py를 다시 만들어 주세요.')
+      return
+    }
     setProjectBusy(true)
     setProjectError('')
     setRunResult(null)
@@ -1391,13 +1601,14 @@ export default function App() {
                 <button className="secondary-button" type="button" onClick={saveProjectDraft} disabled={projectBusy || !projectDirty}>{projectBusy ? '저장 중…' : '초안 저장'}</button>
                 {projectDirty && <button className="secondary-button" type="button" onClick={discardProjectChanges} disabled={projectBusy}>변경 취소</button>}
                 <button className="secondary-button" type="button" onClick={saveProjectVersion} disabled={projectBusy}>{projectBusy ? '처리 중…' : '버전 저장'}</button>
-                <button className="primary-button" type="button" onClick={runProject} disabled={projectBusy}>{projectBusy ? '실행 중…' : '실행'}</button>
+                <button className="primary-button" type="button" onClick={runProject} disabled={projectBusy || !workspace.files.some((file) => file.path === 'main.py')} title={!workspace.files.some((file) => file.path === 'main.py') ? '루트에 main.py 파일이 있어야 실행할 수 있습니다.' : undefined}>{projectBusy ? '실행 중…' : '실행'}</button>
                 <button className="secondary-button" type="button" onClick={downloadProjectArchive} disabled={projectBusy} title="초안을 저장한 뒤 프로젝트 파일을 ZIP으로 내려받습니다.">{projectBusy ? '처리 중…' : 'ZIP 다운로드'}</button>
                 <button className="plain-danger-button" type="button" onClick={deleteCurrentProject} disabled={projectBusy}>프로젝트 삭제</button>
               </div>
             </div>
             {projectNotice && <p className="project-notice" role="status">{projectNotice}</p>}
             {projectError && <p className="form-error project-message" role="alert">{projectError}</p>}
+            {!workspace.files.some((file) => file.path === 'main.py') && <p className="form-error project-message" role="status">루트 main.py가 없어 실행할 수 없어요. 왼쪽 + 버튼에서 파일 종류를 선택하고 <code>main.py</code>를 만들면 다시 실행할 수 있습니다.</p>}
             {projectNeedsReload && <button className="reload-draft-button" type="button" onClick={reloadWorkspace} disabled={projectBusy}>서버의 최신 초안 불러오기</button>}
             <section className="workspace-storage-card">
               <div className="workspace-storage-summary"><div><p className="eyebrow">프로젝트 파일 저장 위치</p><h2>{localProjectDirectory ? `내 컴퓨터 · ${localProjectDirectory.name}` : 'WebLink 작업 공간'}</h2><p>{localProjectDirectory ? '초안을 저장하면 선택한 폴더에도 파일이 기록됩니다. GitHub Desktop에서 커밋·푸시해 친구와 공유할 수 있어요.' : '파일은 WebLink 작업 공간에 저장 중입니다. 내 컴퓨터나 GitHub Desktop 폴더를 연결해 코드 사본을 직접 관리할 수 있어요.'}</p></div><span className={`storage-state ${localProjectDirectory ? 'storage-state-local' : ''}`}>{localProjectDirectory ? '폴더 연결됨' : 'WebLink 저장'}</span></div>
@@ -1412,12 +1623,14 @@ export default function App() {
             </section>}
             <div className="workspace-grid">
               <aside className="file-panel">
-                <div className="file-panel-heading"><p className="panel-label">파일 탐색기</p><button type="button" className="file-add-button" onClick={() => setShowNewFileForm((current) => !current)} disabled={projectBusy} aria-label="새 파일 추가" title="새 파일 추가">＋</button></div>
-                {workspace.files.map((file) => <div className="file-entry" key={file.path}>
-                  <button className={`file-row ${selectedPath === file.path ? 'active' : ''}`} type="button" onClick={() => openProjectFile(file.path)}><span>▤</span><span className="file-row-path">{file.path}</span></button>
-                  <div className="file-entry-actions"><button type="button" onClick={() => void renameProjectFile(file.path)} disabled={projectBusy || file.path === 'main.py'} aria-label={`${file.path} 이름 바꾸기`} title={file.path === 'main.py' ? '실행에 필요한 파일이라 이름을 바꿀 수 없어요.' : '이름 바꾸기'}>✎</button><button type="button" onClick={() => void deleteProjectFile(file.path)} disabled={projectBusy || file.path === 'main.py'} aria-label={`${file.path} 삭제`} title={file.path === 'main.py' ? '실행에 필요한 파일이라 삭제할 수 없어요.' : '파일 삭제'}>×</button></div>
-                </div>)}
-                {showNewFileForm && <form className="new-file-form" onSubmit={addProjectFile}><input autoFocus value={newFilePath} onChange={(event) => setNewFilePath(event.target.value)} placeholder="예: src/new-file.py" aria-label="새 파일 경로" required maxLength={240} /><button type="submit" disabled={projectBusy}>만들기</button></form>}
+                <div className="file-panel-heading"><p className="panel-label">파일 탐색기</p><button type="button" className="file-add-button" onClick={() => { setNewEntryPath(''); setNewEntryKind('auto'); setShowNewEntryForm((current) => !current) }} disabled={projectBusy} aria-label="새 파일 또는 폴더 만들기" title="새 파일 또는 폴더 만들기">＋</button></div>
+                <ProjectFileTree tree={projectFileTree} selectedPath={selectedPath} busy={projectBusy} onOpen={openProjectFile} onRename={(path) => void renameProjectFile(path)} onDelete={(path) => void deleteProjectFile(path)} onMoveFile={(path, folder) => void moveProjectFileToFolder(path, folder)} onImportFiles={(files, folder) => void importDroppedFiles(files, folder)} />
+                {showNewEntryForm && <form className="new-entry-form" onSubmit={createProjectEntry}>
+                  <label>파일 또는 폴더 경로<input autoFocus value={newEntryPath} onChange={(event) => setNewEntryPath(event.target.value)} placeholder="예: src/main.py 또는 src" required maxLength={240} /></label>
+                  <label>항목 종류<select value={newEntryKind} onChange={(event) => setNewEntryKind(event.target.value as NewProjectEntryKind)}><option value="auto">자동 판단{newEntryPath.trim() ? ` · ${inferProjectEntryKind(newEntryPath) === 'file' ? '파일' : '폴더'}` : ''}</option><option value="file">파일</option><option value="folder">폴더</option></select></label>
+                  <p>이름에 확장자가 있으면 파일, 없으면 폴더로 추정합니다. 이름만으로 판단하기 어려우면 종류를 직접 선택하세요.</p>
+                  <button type="submit" className="primary-button" disabled={projectBusy}>{projectBusy ? '만드는 중…' : '만들기'}</button>
+                </form>}
                 <p className="panel-label revision-label">저장한 버전</p>
                 {projectVersions.length ? projectVersions.map((version) => <div className="saved-version-row" key={version.id}><strong>v{version.version_number} · {version.name}</strong><small>Python {version.runtime_spec.version}</small><div><button type="button" onClick={() => viewProjectVersion(version.id)} disabled={projectBusy}>보기</button><button type="button" onClick={() => restoreProjectVersion(version.id)} disabled={projectBusy}>복원</button><button className="delete-version-button" type="button" onClick={() => deleteSavedVersion(version)} disabled={projectBusy}>삭제</button></div></div>) : <p className="revision-empty">저장한 버전이 없습니다.</p>}
               </aside>
