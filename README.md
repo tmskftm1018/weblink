@@ -1,127 +1,60 @@
-# WebLink
+<div align="center">
 
-WebLink은 블록을 조립해 코딩을 배우고, 만든 프로젝트를 API·데이터베이스·외부 앱과 연결하는 과정을 익히는 교육용 개발 플랫폼입니다. 단순히 문법을 연습하는 데서 그치지 않고, 프로젝트를 만들고 저장·실행·디버깅하며 실제 서비스의 데이터를 다루는 경험으로 이어지는 것을 목표로 합니다.
+<img src="docs/assets/weblink-hero.svg" alt="WebLink — 블록에서 실제 프로젝트 연결까지" width="100%">
 
-현재 구현 상태와 확인된 기능, 보안 범위, 다음 개발 항목은 [한국어 프로젝트 진행 상황](docs/PROJECT_STATUS_KO.md)에서 확인할 수 있습니다.
+<h1>WebLink</h1>
 
-## 주요 기능
+**블록 코딩으로 시작해, 실제 앱과 데이터 연결까지**
 
-- 무작위로 섞인 코드 블록을 순서에 맞게 조립하는 학습 활동
-- 사용한 블록 표시와 오답 단계별 힌트
-- 회원가입, 로그인, 사용자별 학습 진도 저장
-- 프로젝트 파일 편집, 초안 저장, 리비전 및 이름이 있는 버전 관리
-- VS Code 기반 Monaco 편집기, 파일 탐색기와 새 파일 추가, 여러 파일 탭 열기·닫기
-- 파일 이름 변경·삭제와 연결된 로컬 폴더 반영, 프로젝트 실행 파일 `main.py` 보호
-- Ctrl+S 초안 저장, Ctrl+Enter 실행, Ctrl+F 편집기 검색, Ctrl+W 탭 닫기 단축키
-- 저장된 프로젝트 파일의 ZIP 내려받기 (환경 비밀 파일과 개인 키 제외)
-- ZIP 프로젝트 가져오기와 파일 검증으로 기기 간 프로젝트 이동
-- 네트워크가 차단된 컨테이너에서 Python 프로젝트 실행
-- 프로젝트마다 분리된 영구 SQLite 데이터베이스
-- API 요청, 데이터 저장·필터링·수정·삭제, 페이지 처리와 재시도 학습
-- Gemini 기반 실행 오류 힌트
-- Google Sheets 연결 및 프로젝트 코드에서 읽기 전용 데이터 조회
-- 미리보기한 Google Sheets 범위로 프로젝트 생성과 첫 SQLite 동기화를 한 번에 실행
-- Google Sheets 행 정리 및 프로젝트 SQLite DB 중복 방지 동기화 실습
-- Google Sheets 반복 동기화의 설정값·비밀값 분리, 새 저장/갱신 기록, DB 결과 검증 실습
-- Google Sheets 데이터를 조건에 따라 API로 전송하고 응답 ID를 프로젝트 DB에 기록하는 종합 실습
-- 누락 값 검증, DB 트랜잭션과 롤백, 빈 목록 보호를 포함한 안전한 전체 동기화 실습
+코드를 배우는 데서 멈추지 않고 프로젝트를 만들고 실행하며 API·데이터베이스·외부 앱을 연결하는 과정을 익히는 교육용 개발 플랫폼입니다.
 
-## 구성
+[시작하기](#-빠른-시작) · [무엇을 할 수 있나요?](#-배우고-만들기) · [프로젝트 현황](docs/PROJECT_STATUS_KO.md)
 
-- `apps/web`: React, TypeScript, Vite 기반 웹 화면
-- `apps/api`: FastAPI 백엔드, PostgreSQL 연동, Alembic 데이터베이스 마이그레이션
-- `apps/worker`: 실행 작업을 처리하는 백그라운드 작업자
-- `infrastructure/runtime`: 제한된 환경에서 학습 코드를 실행하는 Python 런타임
-- `postgres`: 프로젝트 및 학습 정보를 저장하는 PostgreSQL 데이터베이스
+</div>
 
-## 로컬에서 실행하기
+<p align="center">
+  <img alt="React" src="https://img.shields.io/badge/React-웹-149ECA?style=flat-square&logo=react&logoColor=white">
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-프론트엔드-3178C6?style=flat-square&logo=typescript&logoColor=white">
+  <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-API-009688?style=flat-square&logo=fastapi&logoColor=white">
+  <img alt="Python" src="https://img.shields.io/badge/Python-학습_및_실행-3776AB?style=flat-square&logo=python&logoColor=white">
+  <img alt="Docker" src="https://img.shields.io/badge/Docker-로컬_실행-2496ED?style=flat-square&logo=docker&logoColor=white">
+</p>
 
-1. `.env.example`을 참고해 프로젝트 루트에 `.env` 파일을 준비하고 환경에 맞게 값을 설정합니다.
-2. Docker가 실행 중인지 확인한 뒤 다음 명령을 실행합니다.
+## ✨ 배우고 만들기
+
+<p align="center">
+  <img src="docs/assets/weblink-flow.svg" alt="블록 학습에서 프로젝트, API, 데이터베이스, Google Sheets 연결로 이어지는 흐름" width="100%">
+</p>
+
+| 🧩 블록으로 배우기 | 🛠️ 프로젝트 만들기 | 🔗 연결하며 확장하기 |
+| --- | --- | --- |
+| 순서가 섞인 코드 블록을 조립하고, 힌트와 함께 Python 기초를 익힙니다. | Monaco 편집기에서 파일을 관리하고, 코드를 실행하며 프로젝트를 저장합니다. | API·SQLite·Google Sheets를 연결해 실제 데이터 흐름을 연습합니다. |
+
+- **실습부터 프로젝트까지** — 학습 내용을 실제 Python 프로젝트에서 실행해 봅니다.
+- **함께 이어서 작업하기** — 프로젝트 파일을 ZIP 또는 내 컴퓨터 폴더로 옮기고 GitHub Desktop과 함께 사용할 수 있습니다.
+- **안전한 연결 실습** — Google Sheets 읽기 권한과 프로젝트별 데이터베이스를 사용해 데이터 연동 과정을 배웁니다.
+
+> 현재 구현된 기능과 제한사항은 [프로젝트 진행 상황](docs/PROJECT_STATUS_KO.md)에서 확인할 수 있습니다. Google Drive 파일 가져오기와 Google 계정 가입은 아직 구현되지 않았습니다.
+
+## 🚀 빠른 시작
+
+필요한 환경: **Docker Desktop**과 **Git**. 저장소를 받은 뒤 프로젝트 루트에서 실행합니다.
 
 ```bash
 docker compose up --build
 ```
 
-3. 웹 화면을 엽니다: <http://localhost:5173>
+웹 앱: <http://localhost:5173>  ·  API 상태: <http://localhost:8000/health>
 
-API 상태 확인 주소는 <http://localhost:8000/health>, 준비 상태 확인 주소는 <http://localhost:8000/health/ready>입니다.
+환경에 맞는 값이 필요하면 `.env.example`을 참고해 `.env`를 준비하세요. 실제 API 키, OAuth 비밀값, 암호화 키가 담긴 `.env`는 공유하거나 GitHub에 올리지 마세요.
 
-API와 작업자는 PostgreSQL이 준비된 뒤 시작합니다. 작업자는 프로젝트 코드를 격리된 일회성 컨테이너에서 실행하기 위해 Docker 소켓에 접근합니다. 실행할 프로젝트에는 저장된 `main.py` 파일이 필요합니다. 실행 결과와 종료 상태는 프로젝트 화면에서 확인할 수 있습니다. 오브젝트 스토리지는 현재 제품 기능에서 사용하지 않으며, Compose의 `storage` 프로필로 선택 실행할 수 있습니다.
+## 🧭 프로젝트 안내
 
-## 프로젝트 ZIP 이동
+- [한국어 프로젝트 진행 상황과 기능 안내](docs/PROJECT_STATUS_KO.md)
+- [환경 변수 예시](.env.example)
 
-프로젝트 작업 화면에서 현재 저장된 프로젝트 파일을 ZIP으로 내려받고, 프로젝트 목록 화면에서 ZIP을 가져와 새 프로젝트로 복원할 수 있습니다. ZIP은 1.5MB 이하, 압축 해제된 UTF-8 텍스트 파일은 전체 1MB 이하·최대 50개까지 허용합니다. `.env`와 개인 키 파일은 내보내거나 가져오지 않습니다. 변경 중인 초안은 먼저 저장해야 내려받을 수 있습니다.
+## 🔐 실행 및 연동 안내
 
-ZIP에는 프로젝트 파일만 들어갑니다. 프로젝트별 SQLite 데이터베이스, 버전·리비전 기록, Google 연결 토큰과 서버 `.env` 설정은 포함하지 않습니다. ZIP 가져오기는 파일로 새 프로젝트를 만들기 때문에 다른 컴퓨터에서 Google OAuth와 서버 설정을 별도로 구성해야 합니다.
+학습용 Python 코드는 제한된 Docker 컨테이너에서 실행됩니다. Google Sheets 연결은 현재 읽기 전용이며, OAuth 토큰은 서버에 암호화해 저장합니다. 공개 서비스로 배포하려면 HTTPS, 허용 출처, Docker 권한 등 운영 환경을 별도로 설정해야 합니다.
 
-## 내 컴퓨터 폴더와 GitHub Desktop으로 협업하기
-
-Chrome 또는 Edge에서 프로젝트를 연 뒤 **내 컴퓨터 / GitHub Desktop 폴더 연결**을 선택하고, 프로젝트 전용 폴더를 지정할 수 있습니다. 새 폴더라면 **WebLink 파일을 폴더에 복사**, 기존 코드가 있다면 **폴더에서 WebLink로 가져오기**를 선택합니다. 이후 WebLink의 초안을 저장하면 먼저 서버의 현재 초안 버전을 확인한 뒤 연결 폴더에 기록합니다. GitHub Desktop에서는 변경 파일을 검토하고 직접 커밋·푸시해야 다른 사람과 공유됩니다. 동료는 같은 저장소를 자신의 컴퓨터에 복제한 다음 해당 프로젝트 폴더를 WebLink에 별도로 연결합니다.
-
-이 연결은 브라우저의 로컬 폴더 권한을 이용한 파일 복사이며 GitHub API 연동이나 자동 업로드가 아닙니다. 친구가 푸시한 파일은 GitHub Desktop에서 먼저 가져온 뒤 프로젝트 화면에서 **폴더에서 최신 파일 가져오기**를 눌러 반영합니다. 현재 편집 파일은 UTF-8 텍스트 최대 50개·전체 1MB까지 지원하고 `.git`, `node_modules`, 빌드 폴더, `.env`, 개인 키는 제외합니다. 브라우저가 지원하지 않으면 프로젝트 ZIP을 사용할 수 있습니다. WebLink 실행·리비전 기능을 위해 서버 쪽에도 작업 사본은 유지되며, Google Drive에서 직접 가져오는 기능은 아직 구현되지 않았습니다.
-
-프로젝트 편집 중 실행·리비전·버전 저장·ZIP 내려받기나 화면 이동을 선택하면 먼저 변경 초안을 저장합니다. 같은 내용은 초안 버전이나 저장 복사본을 중복 생성하지 않습니다. 저장 버전은 개별 삭제할 수 있고 프로젝트 삭제는 해당 프로젝트의 초안, 저장 버전, 실행 기록을 WebLink에서 지우며 프로젝트 전용 SQLite Docker 볼륨 정리도 작업자에게 요청합니다. 프로젝트 삭제는 컴퓨터/GitHub 폴더 파일을 지우지 않습니다. 저장하지 않은 수정은 **변경 취소**로 마지막 저장 상태에 되돌릴 수 있습니다.
-
-## 개발 확인 명령
-
-- 웹 의존성 설치: `make web-install`
-- 웹 프로덕션 빌드: `make web-build`
-- API 테스트: `make api-test`
-- API 코드 검사: `make api-lint`
-- 데이터베이스 마이그레이션: `make db-upgrade`
-- 작업자 직접 실행: `cd apps/worker && uv run python -m app.main`
-
-## 환경 설정과 비밀값
-
-환경 변수 목록은 `.env.example`에 있습니다. 실제 API 키, OAuth 비밀값, 암호화 키가 들어가는 `.env` 파일은 GitHub에 올리지 마세요.
-
-## 학습 과정
-
-학습 경로는 다음 과정으로 구성됩니다.
-
-1. **소프트웨어의 흐름**: 입력·처리·출력, 변수, 조건, 반복
-2. **파이썬 첫걸음**: 무작위 순서의 코드 블록 조립과 실제 프로젝트 실행
-3. **프로젝트와 데이터 연결하기**: SQLite 기초와 프로젝트별 데이터 보관
-4. **앱과 API 연결하기**: GET·POST·PUT 요청, JSON과 쿼리 매개변수, 오류 처리, 데이터 저장·필터링·수정·가져오기, 페이지 처리, 삭제 동기화와 일시 오류 재시도
-5. **외부 앱과 안전하게 연결하기**: 권한 범위를 고려한 연결, 승인된 데이터 읽기, 프로젝트 데이터베이스로 동기화
-
-현재 총 5개 코스, 37개 수업이 있습니다. 외부 앱 코스에서는 Google Sheets 범위를 읽고, 데이터 형식을 검증하고, 프로젝트 SQLite DB에 트랜잭션으로 저장하며, 조건에 맞는 데이터를 API로 보내고 응답 ID를 다시 DB에 보관하는 전체 연결 흐름을 연습합니다. 마지막 단계에서는 빈 데이터가 기존 DB를 지우지 않게 보호하면서 시트의 현재 상태와 DB를 동기화하고, 새로 저장한 행·갱신한 행과 DB의 최종 내용을 검증합니다. OAuth 비밀값은 코드에 넣지 않고 연결 설정과 구분하는 방법도 연습합니다. 블록은 무작위로 제공되며, 이미 사용한 블록은 표시되고 다시 선택할 수 없습니다. 오답에는 먼저 넓은 힌트를 주고, 다시 시도하면 더 구체적인 힌트를 제공합니다. 학습 코드는 Python으로 확인할 수 있고 실제 프로젝트로 옮겨 실행할 수 있습니다.
-
-학습용 외부 앱 연결 과정의 샘플 공급자는 이미 승인된 연결을 흉내 내는 로컬 테스트 데이터입니다. 실제 OAuth 연결이나 외부 서비스 자격 증명을 제공하는 기능은 아닙니다.
-
-## Google Sheets 연결
-
-현재 외부 앱 연결 화면에서 Google Sheets를 읽기 전용으로 연결할 수 있습니다. Google Cloud에서 웹 애플리케이션 유형의 OAuth 클라이언트를 만들고 Google Sheets API를 활성화한 다음, 아래 리디렉션 URI를 등록해야 합니다.
-
-```text
-http://localhost:8000/api/v1/connections/google/oauth/callback
-```
-
-OAuth 클라이언트 ID와 비밀값은 `.env`의 `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`에 설정합니다. Fernet 암호화 키는 `CONNECTION_ENCRYPTION_KEY`에 설정해야 합니다. 값을 바꾼 뒤에는 API와 작업자를 다시 시작하세요. 저장된 Google 토큰은 이 키로 암호화되므로 키를 안전하게 보관해야 합니다.
-
-프로젝트 코드에서는 다음과 같이 연결된 시트의 지정 범위를 읽을 수 있습니다.
-
-```python
-from weblink_api import get_google_sheet
-
-sheet = get_google_sheet("SPREADSHEET_ID", "'시트1'!A1:C20")
-rows = sheet["values"]
-print(rows)
-```
-
-Google OAuth는 `spreadsheets.readonly` 권한만 요청합니다. 토큰은 PostgreSQL에 암호화해 저장하고, 프로젝트 코드 실행 컨테이너에는 네트워크 접근이나 OAuth 비밀값을 제공하지 않습니다. 별도의 제한된 연결 서비스가 토큰 갱신과 시트 읽기를 처리하고 셀 값만 실행 환경에 전달합니다. 범위 입력은 해당 읽기 요청에 적용되며, Google 계정의 접근 권한 자체를 특정 셀 범위로 제한하지는 않습니다.
-
-시트 미리보기 아래의 **시트 데이터를 가져와 프로젝트 DB에 저장**을 누르면 새 프로젝트를 만든 다음 동기화 코드를 한 번 실행합니다. 실행 출력에서 새로 저장하거나 갱신한 행 수를 확인할 수 있고, 이후에는 프로젝트 화면에서 코드를 고친 뒤 직접 다시 실행할 수 있습니다. 미리보기에 오류가 나면 연결 화면의 한국어 안내를 확인하세요. 범위 오류는 탭 이름과 셀 범위를, 권한 오류는 WebLink에 연결한 Google 계정의 시트 접근 권한을 확인합니다. Sheets API 사용 설정 오류가 표시되면 Google Cloud Console의 **API 및 서비스 → 라이브러리**에서 Google Sheets API를 활성화하세요.
-
-Google 계정으로 WebLink에 가입·로그인하거나 Google Drive에서 파일을 가져오는 기능은 이후 개발 항목입니다.
-
-## 실행 보안 참고
-
-학습용 Python 코드는 네트워크가 차단된 비루트 컨테이너에서 실행됩니다. 파일 시스템은 읽기 전용이며 메모리, CPU, 프로세스 수, 실행 시간과 로그 크기에 제한이 있습니다. 프로젝트별 `/data` 볼륨에는 해당 프로젝트의 SQLite 데이터가 다음 실행까지 보관됩니다.
-
-작업자는 격리 컨테이너를 시작하기 위해 `/var/run/docker.sock`에 접근해야 합니다. Docker 데몬과 작업자 호스트는 신뢰할 수 있는 인프라에서만 운영하세요. 공개 서비스에 배포하기 전에는 Docker 권한과 HTTPS, 허용 웹 출처 등 운영 환경을 별도로 구성해야 합니다.
-
-## 라이선스
-
-현재 저장소에는 라이선스 파일이 포함되어 있지 않습니다. 재사용 및 배포 조건은 라이선스를 정한 뒤 추가할 예정입니다.
+저장소에 라이선스 파일은 아직 없습니다. 재사용 및 배포 조건은 라이선스가 추가된 뒤 확정됩니다.

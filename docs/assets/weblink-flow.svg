@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="230" viewBox="0 0 1200 230" fill="none">
+  <rect width="1200" height="230" rx="22" fill="#F4F8F5"/>
+  <text x="600" y="40" text-anchor="middle" fill="#173C31" font-family="Arial,sans-serif" font-size="17" font-weight="700" letter-spacing="2">FROM FIRST BLOCK TO REAL DATA</text>
+  <g font-family="Arial,sans-serif" text-anchor="middle">
+    <rect x="30" y="75" width="235" height="112" rx="18" fill="#E2F4E9"/>
+    <rect x="56" y="97" width="34" height="28" rx="7" fill="#39A879"/><path d="M68 103l8 8-8 8" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><rect x="97" y="101" width="100" height="8" rx="4" fill="#9BCDB0"/><rect x="97" y="116" width="78" height="8" rx="4" fill="#B2D9C0"/><rect x="56" y="139" width="34" height="28" rx="7" fill="#F0B64E"/><path d="M68 145h12M68 151h12M68 157h8" stroke="white" stroke-width="2.5" stroke-linecap="round"/><rect x="97" y="143" width="120" height="8" rx="4" fill="#9BCDB0"/><rect x="97" y="158" width="85" height="8" rx="4" fill="#B2D9C0"/>
+    <text x="147" y="211" fill="#315545" font-size="14" font-weight="700">블록 코딩</text>
+    <path d="M278 131h51" stroke="#70B58D" stroke-width="3" stroke-dasharray="6 7"/><path d="m320 122 10 9-10 9" stroke="#70B58D" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="345" y="75" width="235" height="112" rx="18" fill="#E8F0FB"/>
+    <rect x="370" y="96" width="185" height="70" rx="9" fill="#172B3B"/><rect x="370" y="96" width="185" height="16" rx="9" fill="#29465B"/><circle cx="383" cy="104" r="3" fill="#F28B82"/><circle cx="394" cy="104" r="3" fill="#FDD663"/><circle cx="405" cy="104" r="3" fill="#81C995"/><path d="M390 128h13m-13 12h35m-35 12h24" stroke="#91D9B0" stroke-width="4" stroke-linecap="round"/><path d="m415 125 7 3-7 3m-10 6 7 3-7 3" stroke="#F1C36B" stroke-width="2"/>
+    <text x="462" y="211" fill="#315545" font-size="14" font-weight="700">프로젝트 만들기</text>
+    <path d="M593 131h51" stroke="#70B58D" stroke-width="3" stroke-dasharray="6 7"/><path d="m635 122 10 9-10 9" stroke="#70B58D" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="660" y="75" width="235" height="112" rx="18" fill="#FFF1D9"/>
+    <circle cx="777" cy="128" r="31" fill="#F0B64E"/><path d="M765 127h24m-8-9 9 9-9 9" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="741" cy="100" r="5" fill="#E1A837"/><circle cx="813" cy="156" r="5" fill="#E1A837"/><path d="M746 101l14 14m40 28 9 9" stroke="#E1A837" stroke-width="2" stroke-dasharray="4 4"/>
+    <text x="777" y="211" fill="#315545" font-size="14" font-weight="700">API 연결</text>
+    <path d="M908 131h51" stroke="#70B58D" stroke-width="3" stroke-dasharray="6 7"/><path d="m950 122 10 9-10 9" stroke="#70B58D" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="975" y="75" width="195" height="112" rx="18" fill="#E9EAF9"/>
+    <ellipse cx="1072" cy="107" rx="34" ry="12" fill="#7C85D8"/><path d="M1038 107v40c0 7 15 13 34 13s34-6 34-13v-40" stroke="#6973C8" stroke-width="4"/><path d="M1038 127c0 7 15 13 34 13s34-6 34-13" stroke="#6973C8" stroke-width="3"/><path d="M1072 89v-9m-8 7 8-8 8 8" stroke="#6973C8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="1072" y="211" fill="#315545" font-size="14" font-weight="700">데이터 저장</text>
+  </g>
+</svg>

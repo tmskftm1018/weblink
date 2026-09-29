@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="340" viewBox="0 0 1200 340" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="28" y1="18" x2="1169" y2="339" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#102D2A"/><stop offset="1" stop-color="#174F43"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="836" y1="40" x2="1116" y2="310" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#83E1B1" stop-opacity=".32"/><stop offset="1" stop-color="#83E1B1" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="340" rx="28" fill="url(#bg)"/>
+  <circle cx="1002" cy="165" r="183" fill="url(#glow)"/>
+  <path d="M0 270C206 220 330 355 548 299s370-39 652-139v180H0v-70Z" fill="#0A2422" fill-opacity=".28"/>
+  <g opacity=".95">
+    <rect x="798" y="67" width="119" height="62" rx="15" fill="#E8F7EF"/>
+    <rect x="812" y="81" width="28" height="28" rx="7" fill="#39A879"/><path d="m821 87 8 8-8 8" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="852" y="84" width="48" height="7" rx="3.5" fill="#A6C9B7"/><rect x="852" y="98" width="35" height="6" rx="3" fill="#C1D8CA"/>
+    <path d="M918 99h52" stroke="#A4E5BD" stroke-width="3" stroke-dasharray="6 7"/><path d="m963 91 9 8-9 8" stroke="#A4E5BD" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="977" y="67" width="122" height="62" rx="15" fill="#E8F7EF"/>
+    <rect x="991" y="81" width="28" height="28" rx="7" fill="#F0B64E"/><path d="M1000 88h10M1000 94h10M1000 100h7" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+    <rect x="1031" y="84" width="51" height="7" rx="3.5" fill="#A6C9B7"/><rect x="1031" y="98" width="35" height="6" rx="3" fill="#C1D8CA"/>
+    <path d="M1038 160h56a13 13 0 0 1 13 13v84a13 13 0 0 1-13 13h-56a13 13 0 0 1-13-13v-84a13 13 0 0 1 13-13Z" fill="#E8F7EF"/>
+    <ellipse cx="1066" cy="177" rx="28" ry="10" fill="#69C995"/><path d="M1038 177v65c0 5.5 12.5 10 28 10s28-4.5 28-10v-65" stroke="#39A879" stroke-width="4"/><path d="M1038 199c0 5.5 12.5 10 28 10s28-4.5 28-10M1038 221c0 5.5 12.5 10 28 10s28-4.5 28-10" stroke="#39A879" stroke-width="3"/>
+  </g>
+  <g fill="#B7EACD" opacity=".75"><circle cx="755" cy="67" r="4"/><circle cx="1137" cy="103" r="5"/><circle cx="944" cy="285" r="4"/><circle cx="741" cy="235" r="3"/></g>
+  <text x="76" y="94" fill="#A7E5BE" font-family="Arial,sans-serif" font-size="17" font-weight="700" letter-spacing="3">LEARN · BUILD · CONNECT</text>
+  <text x="72" y="177" fill="white" font-family="Arial,sans-serif" font-size="64" font-weight="750" letter-spacing="-2">WebLink</text>
+  <text x="76" y="222" fill="#E5F5EB" font-family="Arial,sans-serif" font-size="23" font-weight="600">블록에서 실제 프로젝트 연결까지</text>
+  <text x="76" y="263" fill="#B9D8C9" font-family="Arial,sans-serif" font-size="17">코드를 조립하고, 실행하고, 앱과 데이터를 연결해 보세요.</text>
+</svg>
