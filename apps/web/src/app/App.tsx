@@ -396,6 +396,53 @@ export default function App() {
     }
   }
 
+  async function createSampleProject() {
+    if (projectBusy) return
+    setProjectBusy(true)
+    setProjectError('')
+    setProjectNotice('')
+    setLocalProjectDirectory(null)
+    setPendingProjectDirectory(null)
+    let createdId: string | null = null
+    const files = [
+      {
+        path: 'README.md',
+        content: '# 독서 기록 앱\n\n실행 버튼을 눌러 책을 추가하고 읽기 상태를 바꿔 보세요.\n\n- `main.py`: 프로그램의 시작점\n- `books.py`: SQLite 데이터베이스와 책 관리 함수\n\n책 기록은 프로젝트 전용 SQLite 데이터베이스(`/data/books.db`)에 저장되어 다음 실행에도 남습니다.\n',
+      },
+      {
+        path: 'main.py',
+        content: 'from books import add_book, initialize_database, list_books, mark_as_read\n\n\ndef show_books():\n    print("\\n내 책 목록")\n    for book in list_books():\n        status = "읽음" if book["is_read"] else "읽는 중"\n        print(f"- {book[\'title\']} / {book[\'author\']} ({status})")\n\n\ninitialize_database()\nadd_book("어린 왕자", "앙투안 드 생텍쥐페리")\nadd_book("모모", "미하엘 엔데")\nmark_as_read("어린 왕자")\nshow_books()\n',
+      },
+      {
+        path: 'books.py',
+        content: 'import sqlite3\n\nDATABASE_PATH = "/data/books.db"\n\n\ndef connect():\n    return sqlite3.connect(DATABASE_PATH)\n\n\ndef initialize_database():\n    with connect() as database:\n        database.execute(\n            """CREATE TABLE IF NOT EXISTS books (\n                title TEXT PRIMARY KEY,\n                author TEXT NOT NULL,\n                is_read INTEGER NOT NULL DEFAULT 0\n            )"""\n        )\n\n\ndef add_book(title, author):\n    with connect() as database:\n        database.execute(\n            "INSERT OR IGNORE INTO books (title, author) VALUES (?, ?)",\n            (title, author),\n        )\n\n\ndef mark_as_read(title):\n    with connect() as database:\n        database.execute(\n            "UPDATE books SET is_read = 1 WHERE title = ?",\n            (title,),\n        )\n\n\ndef list_books():\n    with connect() as database:\n        database.row_factory = sqlite3.Row\n        rows = database.execute(\n            "SELECT title, author, is_read FROM books ORDER BY title"\n        ).fetchall()\n        return [dict(row) for row in rows]\n',
+      },
+    ]
+    try {
+      const created = await projectService.create({
+        name: '독서 기록 앱',
+        description: 'Python과 SQLite로 책 기록을 저장하고 수정하는 실행 예제',
+      })
+      createdId = created.id
+      await projectService.saveDraft(created.id, created.draft_version, files)
+      const loaded = await projectService.get(created.id)
+      setWorkspace(loaded)
+      setProjects((current) => [loaded, ...current.filter((item) => item.id !== loaded.id)])
+      setProjectVersions([])
+      setVersionPreview(null)
+      resetProjectFiles('main.py')
+      setProjectDirty(false)
+      setProjectNeedsReload(false)
+      setProjectNotice('실행해 볼 수 있는 SQLite 예제 프로젝트를 만들었어요.')
+      setView('workspace')
+    } catch (cause) {
+      if (createdId) await projectService.delete(createdId).catch(() => undefined)
+      setProjectError(cause instanceof Error ? cause.message : '예제 프로젝트를 만들지 못했습니다.')
+    } finally {
+      setProjectBusy(false)
+    }
+  }
+
   async function createSheetsDatabaseProject() {
     const normalizedId = extractGoogleSpreadsheetId(spreadsheetId)
     const range = sheetPreview?.range
@@ -1320,6 +1367,7 @@ export default function App() {
                   <label>프로젝트 이름<input value={newProjectName} onChange={(event) => setNewProjectName(event.target.value)} required maxLength={120} placeholder="예: 나만의 인사말 앱" /></label>
                   <label>한 줄 설명<textarea value={newProjectDescription} onChange={(event) => setNewProjectDescription(event.target.value)} maxLength={1000} rows={3} placeholder="무엇을 만들고 싶나요?" /></label>
                   <button className="primary-button" type="submit" disabled={projectBusy}>{projectBusy ? '처리 중…' : '프로젝트 시작하기'}</button>
+                  <div className="sample-project-start"><p>먼저 기능을 살펴보고 싶다면</p><button className="secondary-button" type="button" onClick={createSampleProject} disabled={projectBusy}>{projectBusy ? '예제 준비 중…' : 'SQLite 예제 열기'}</button><small>실행해 볼 수 있는 독서 기록 앱과 여러 파일을 만들어요.</small></div>
                 </form>
                 <form className="project-create-form project-import-form" onSubmit={handleImportProject}>
                   <p className="eyebrow">다른 기기에서 가져오기</p><h2>프로젝트 ZIP 불러오기</h2>
