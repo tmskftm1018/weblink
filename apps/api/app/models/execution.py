@@ -65,3 +65,10 @@ class Job(Base):
     last_error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class ProjectStorageCleanup(Base):
+    __tablename__ = "project_storage_cleanup"
+
+    project_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

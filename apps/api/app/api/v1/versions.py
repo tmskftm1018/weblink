@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.v1.auth import get_current_user
@@ -59,6 +59,21 @@ def get_version(
         return version_service.get_version(db, user, project_id, version_id)
     except (version_service.ProjectNotFound, version_service.VersionNotFound) as exc:
         raise HTTPException(status_code=404, detail="Version not found") from exc
+
+
+@router.delete(
+    "/{project_id}/versions/{version_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_version(project_id: UUID, version_id: UUID, db: SessionDep, user: CurrentUser) -> Response:
+    try:
+        version_service.delete_version(db, user, project_id, version_id)
+    except version_service.ProjectNotFound as exc:
+        raise HTTPException(status_code=404, detail="Project not found") from exc
+    except version_service.VersionNotFound as exc:
+        raise HTTPException(status_code=404, detail="Version not found") from exc
+    except version_service.ProjectReadOnly as exc:
+        raise HTTPException(status_code=403, detail="Project is read-only") from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(

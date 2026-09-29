@@ -80,6 +80,17 @@ def save_version(
         raise RevisionNotFound
     # Serialize per-project numbering under a row lock; the unique constraint is the final guard.
     db.scalar(select(Project).where(Project.id == project_id).with_for_update())
+    same_snapshot = db.scalar(
+        select(ProjectVersion)
+        .where(
+            ProjectVersion.project_id == project_id,
+            ProjectVersion.source_revision_id == revision.id,
+        )
+        .order_by(ProjectVersion.version_number.desc())
+        .limit(1)
+    )
+    if same_snapshot is not None:
+        return ProjectVersionResponse.model_validate(same_snapshot)
     latest_number = db.scalar(
         select(func.max(ProjectVersion.version_number)).where(ProjectVersion.project_id == project_id)
     ) or 0
@@ -96,6 +107,21 @@ def save_version(
     db.commit()
     db.refresh(version)
     return ProjectVersionResponse.model_validate(version)
+
+
+def delete_version(db: Session, user: User, project_id: UUID, version_id: UUID) -> None:
+    project, role = repository.get_access(db, project_id, user.id)
+    if project is None:
+        raise ProjectNotFound
+    if role not in {"OWNER", "EDITOR"}:
+        raise ProjectReadOnly
+    version = db.scalar(select(ProjectVersion).where(
+        ProjectVersion.project_id == project_id, ProjectVersion.id == version_id
+    ))
+    if version is None:
+        raise VersionNotFound
+    db.delete(version)
+    db.commit()
 
 
 def restore_version(

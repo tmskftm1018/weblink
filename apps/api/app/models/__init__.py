@@ -1,8 +1,8 @@
 from app.models.ai import AIChange, AIConversation, AIMessage, AIProvider, AIRequest
 from app.models.auth import AuthIdentity, User, UserSession
-from app.models.debugging import DebugSession
 from app.models.connections import GoogleConnection, GoogleOAuthState
-from app.models.execution import ExecutionSnapshot, Job, Run
+from app.models.debugging import DebugSession
+from app.models.execution import ExecutionSnapshot, Job, ProjectStorageCleanup, Run
 from app.models.learning import (
     Concept,
     Course,
@@ -30,9 +30,9 @@ __all__ = [
     "Concept",
     "Course",
     "DebugSession",
+    "ExecutionSnapshot",
     "GoogleConnection",
     "GoogleOAuthState",
-    "ExecutionSnapshot",
     "Job",
     "LearningEvidence",
     "LearningProgress",
@@ -43,6 +43,7 @@ __all__ = [
     "ProjectFile",
     "ProjectMember",
     "ProjectRevision",
+    "ProjectStorageCleanup",
     "ProjectVersion",
     "Run",
     "User",

@@ -39,9 +39,37 @@ class GoogleConnectionNotFound(Exception):
 
 
 class GoogleRequestFailed(Exception):
-    def __init__(self, status_code: int = 502) -> None:
+    def __init__(self, status_code: int = 502, message: str = "Google 서비스에 요청하지 못했습니다. 잠시 후 다시 시도해 주세요.") -> None:
         self.status_code = status_code
-        super().__init__("Google Sheets could not complete the request")
+        super().__init__(message)
+
+
+def _google_failure_message(status_code: int, body: bytes, *, refreshing_token: bool = False) -> str:
+    if refreshing_token and status_code in (400, 401):
+        return "Google 연결이 만료되었어요. Google 계정 연결을 해제한 뒤 다시 연결해 주세요."
+
+    try:
+        payload = json.loads(body)
+    except (ValueError, UnicodeDecodeError):
+        payload = {}
+    error = payload.get("error", {}) if isinstance(payload, dict) else {}
+    provider_text = json.dumps(error, ensure_ascii=False).lower() if isinstance(error, dict) else ""
+
+    if status_code == 400:
+        return "시트 범위를 읽지 못했어요. 탭 이름과 범위(예: '시트1'!A1:C20)를 확인해 주세요."
+    if status_code == 401:
+        return "Google 인증이 만료되었어요. Google 계정 연결을 해제한 뒤 다시 연결해 주세요."
+    if status_code == 403 and any(
+        marker in provider_text for marker in ("accessnotconfigured", "service_disabled", "has not been used", "not enabled")
+    ):
+        return "Google Sheets API가 Google Cloud 프로젝트에서 활성화되어 있지 않아요. API 및 서비스에서 사용 설정해 주세요."
+    if status_code == 403:
+        return "Google 계정에 이 스프레드시트 접근 권한이 없어요. 연결된 계정과 시트 공유 권한을 확인해 주세요."
+    if status_code == 404:
+        return "스프레드시트를 찾지 못했어요. ID가 맞는지, 연결된 Google 계정에서 열 수 있는지 확인해 주세요."
+    if status_code == 429:
+        return "Google Sheets 요청 한도에 도달했어요. 잠시 기다린 뒤 다시 시도해 주세요."
+    return "Google Sheets 서비스에 일시적인 문제가 있어요. 잠시 후 다시 시도해 주세요."
 
 
 def is_configured() -> bool:
@@ -102,6 +130,17 @@ def _post_form(url: str, payload: dict[str, str]) -> dict:
     try:
         with urllib.request.urlopen(request, timeout=8) as response:
             body = response.read(256_001)
+    except urllib.error.HTTPError as exc:
+        try:
+            body = exc.read(32_768)
+        except OSError:
+            body = b""
+        refreshing_token = payload.get("grant_type") == "refresh_token"
+        status_code = 401 if refreshing_token and exc.code in (400, 401) else exc.code
+        raise GoogleRequestFailed(
+            status_code,
+            _google_failure_message(exc.code, body, refreshing_token=refreshing_token),
+        ) from exc
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         raise GoogleRequestFailed from exc
     if len(body) > 256_000:
@@ -125,7 +164,12 @@ def _get_json(url: str, access_token: str) -> dict:
         with urllib.request.urlopen(request, timeout=8) as response:
             body = response.read(1_048_577)
     except urllib.error.HTTPError as exc:
-        raise GoogleRequestFailed(exc.code if exc.code in (400, 401, 403, 404, 429) else 502) from exc
+        try:
+            error_body = exc.read(32_768)
+        except OSError:
+            error_body = b""
+        status_code = exc.code if exc.code in (400, 401, 403, 404, 429) else 502
+        raise GoogleRequestFailed(status_code, _google_failure_message(exc.code, error_body)) from exc
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         raise GoogleRequestFailed from exc
     if len(body) > 1_048_576:

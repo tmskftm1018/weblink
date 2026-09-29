@@ -17,6 +17,13 @@ def test_version_restore_creates_a_new_revision_and_restores_draft(client: TestC
     assert saved.status_code == 201
     version = saved.json()
     assert version["version_number"] == 1
+    repeated_save = client.post(
+        f"/api/v1/projects/{project_id}/versions",
+        json={"revision_id": first_revision["id"], "name": "Another copy"},
+    )
+    assert repeated_save.status_code == 201
+    assert repeated_save.json()["id"] == version["id"]
+    assert len(client.get(f"/api/v1/projects/{project_id}/versions").json()) == 1
 
     changed_files = [dict(file, content=file["content"] + "# changed\n") for file in project["files"]]
     updated = client.put(
@@ -40,3 +47,7 @@ def test_version_restore_creates_a_new_revision_and_restores_draft(client: TestC
     versions = client.get(f"/api/v1/projects/{project_id}/versions")
     assert versions.status_code == 200
     assert len(versions.json()) == 1
+
+    deleted = client.delete(f"/api/v1/projects/{project_id}/versions/{version['id']}")
+    assert deleted.status_code == 204
+    assert client.get(f"/api/v1/projects/{project_id}/versions").json() == []

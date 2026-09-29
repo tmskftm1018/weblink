@@ -1,7 +1,8 @@
 from typing import Annotated
+from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.v1.auth import get_current_user
@@ -32,12 +33,78 @@ def create_project(payload: ProjectCreateRequest, db: SessionDep, user: CurrentU
     return project_service.create_project(db, user, payload)
 
 
+@router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_project(project_id: UUID, db: SessionDep, user: CurrentUser) -> Response:
+    try:
+        project_service.delete_project(db, user, project_id)
+    except project_service.ProjectNotFound as exc:
+        raise HTTPException(status_code=404, detail="Project not found") from exc
+    except project_service.ProjectReadOnly as exc:
+        raise HTTPException(status_code=403, detail="Only the project owner can delete this project") from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/import", response_model=ProjectWorkspaceResponse, status_code=status.HTTP_201_CREATED)
+async def import_project(
+    request: Request,
+    name: Annotated[str, Query(min_length=1, max_length=120)],
+    db: SessionDep,
+    user: CurrentUser,
+) -> ProjectWorkspaceResponse:
+    project_name = name.strip()
+    if not project_name:
+        raise HTTPException(status_code=422, detail="프로젝트 이름을 입력해 주세요.")
+    if len(project_name) > 120:
+        raise HTTPException(status_code=422, detail="프로젝트 이름은 120자 이하여야 합니다.")
+    try:
+        content_length = int(request.headers.get("content-length", "0"))
+    except ValueError:
+        content_length = 0
+    if content_length > project_service.MAX_ARCHIVE_BYTES:
+        raise HTTPException(status_code=413, detail="ZIP 파일은 1.5MB 이하여야 합니다.")
+    chunks: list[bytes] = []
+    total = 0
+    async for chunk in request.stream():
+        total += len(chunk)
+        if total > project_service.MAX_ARCHIVE_BYTES:
+            raise HTTPException(status_code=413, detail="ZIP 파일은 1.5MB 이하여야 합니다.")
+        chunks.append(chunk)
+    try:
+        return project_service.import_project_archive(
+            db,
+            user,
+            ProjectCreateRequest(name=project_name, description="ZIP에서 가져온 프로젝트"),
+            b"".join(chunks),
+        )
+    except project_service.InvalidProjectArchive as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="ZIP 파일이 손상되었거나 지원하지 않는 프로젝트 파일입니다. 안전한 UTF-8 텍스트 파일로 다시 압축해 주세요.",
+        ) from exc
+    except project_service.InvalidDraft as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @router.get("/{project_id}", response_model=ProjectWorkspaceResponse)
 def get_project(project_id: UUID, db: SessionDep, user: CurrentUser) -> ProjectWorkspaceResponse:
     try:
         return project_service.get_workspace(db, user, project_id)
     except project_service.ProjectNotFound as exc:
         raise HTTPException(status_code=404, detail="Project not found") from exc
+
+
+@router.get("/{project_id}/export")
+def export_project(project_id: UUID, db: SessionDep, user: CurrentUser) -> Response:
+    try:
+        content, filename = project_service.export_project_archive(db, user, project_id)
+    except project_service.ProjectNotFound as exc:
+        raise HTTPException(status_code=404, detail="Project not found") from exc
+    encoded_filename = quote(filename)
+    return Response(
+        content=content,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"},
+    )
 
 
 @router.put("/{project_id}/draft", response_model=DraftSavedResponse)

@@ -244,6 +244,175 @@ _BLOCK_ANSWERS = {
         "connection.close()",
         "확정 일정 동기화: 2개",
     ),
+    "sheets-read-range": (
+        ["import-sheets", "set-sheet-id", "read-range", "get-values", "count-rows", "show-row-count"],
+        "from weblink_api import get_google_sheet\n"
+        "spreadsheet_id = 'YOUR_SPREADSHEET_ID'\n"
+        "sheet = get_google_sheet(spreadsheet_id, \"'시트1'!A1:C4\")\n"
+        "rows = sheet['values']\n"
+        "print(f'가져온 행: {len(rows)}개')",
+        "가져온 행: 4개",
+    ),
+    "sheets-map-rows": (
+        ["import-sheets", "read-range", "get-values", "split-header", "map-records", "filter-records", "show-records"],
+        "from weblink_api import get_google_sheet\n"
+        "sheet = get_google_sheet('YOUR_SPREADSHEET_ID', \"'시트1'!A1:C4\")\n"
+        "rows = sheet['values']\n"
+        "headers = rows[0]\n"
+        "records = [dict(zip(headers, row)) for row in rows[1:] if len(row) == len(headers)]\n"
+        "qualified = [record for record in records if int(record['점수']) >= 90]\n"
+        "print(', '.join(record['이름'] for record in qualified))",
+        "민지, 지우",
+    ),
+    "sheets-sync-database": (
+        ["import-sqlite", "import-sheets", "open-db", "create-table", "read-range", "get-values", "split-header", "sync-records", "commit", "count-records", "show-count", "close-db"],
+        "import sqlite3\n"
+        "from weblink_api import get_google_sheet\n"
+        "connection = sqlite3.connect('/data/students.db')\n"
+        "connection.execute('CREATE TABLE IF NOT EXISTS sheet_students (name TEXT PRIMARY KEY, score INTEGER)')\n"
+        "sheet = get_google_sheet('YOUR_SPREADSHEET_ID', \"'시트1'!A1:C4\")\n"
+        "rows = sheet['values']\n"
+        "headers = rows[0]\n"
+        "for row in rows[1:]:\n"
+        "    if len(row) == len(headers):\n"
+        "        record = dict(zip(headers, row))\n"
+        "        connection.execute('INSERT OR REPLACE INTO sheet_students VALUES (?, ?)', (record['이름'], int(record['점수'])))\n"
+        "connection.commit()\n"
+        "count = connection.execute('SELECT COUNT(*) FROM sheet_students').fetchone()[0]\n"
+        "print(f'시트에서 동기화한 학생: {count}명')\n"
+        "connection.close()",
+        "시트에서 동기화한 학생: 3명",
+    ),
+    "sheets-to-api": (
+        ["imports", "open-db", "create-table", "read-range", "split-header", "map-records", "send-selected", "commit", "count-results", "show-results", "close-db"],
+        "import sqlite3\n"
+        "from weblink_api import get_google_sheet, post_json\n"
+        "connection = sqlite3.connect('/data/students.db')\n"
+        "connection.execute('CREATE TABLE IF NOT EXISTS published_students (api_id INTEGER PRIMARY KEY, name TEXT, score INTEGER)')\n"
+        "sheet = get_google_sheet('YOUR_SPREADSHEET_ID', \"'시트1'!A1:C4\")\n"
+        "rows = sheet['values']\n"
+        "headers = rows[0]\n"
+        "records = [dict(zip(headers, row)) for row in rows[1:] if len(row) == len(headers)]\n"
+        "for record in records:\n"
+        "    score = int(record['점수'])\n"
+        "    if score >= 90:\n"
+        "        result = post_json('/students', {'name': record['이름'], 'score': score})\n"
+        "        student = result['student']\n"
+        "        connection.execute('INSERT OR REPLACE INTO published_students VALUES (?, ?, ?)', (student['id'], student['name'], student['score']))\n"
+        "connection.commit()\n"
+        "count = connection.execute('SELECT COUNT(*) FROM published_students').fetchone()[0]\n"
+        "print(f'전송하고 기록한 학생: {count}명')\n"
+        "connection.close()",
+        "전송하고 기록한 학생: 2명",
+    ),
+    "sheets-validate-rows": (
+        ["import-sheets", "read-range", "get-values", "read-header", "map-records", "validate-records", "count-valid", "show-valid"],
+        "from weblink_api import get_google_sheet\n"
+        "sheet = get_google_sheet('YOUR_SPREADSHEET_ID', \"'시트1'!A1:C4\")\n"
+        "rows = sheet['values']\n"
+        "headers = rows[0]\n"
+        "records = [dict(zip(headers, row)) for row in rows[1:] if len(row) == len(headers)]\n"
+        "students = [record for record in records if str(record.get('이름', '')).strip() and str(record.get('점수', '')).isdigit()]\n"
+        "print(f'유효한 학생: {len(students)}명')",
+        "유효한 학생: 3명",
+    ),
+    "sheets-transactional-sync": (
+        ["imports", "open-db", "create-table", "read-range", "read-records", "prepare-students", "safe-save", "count-saved", "show-saved", "close-db"],
+        "import sqlite3\n"
+        "from weblink_api import get_google_sheet\n"
+        "connection = sqlite3.connect('/data/students.db')\n"
+        "connection.execute('CREATE TABLE IF NOT EXISTS safe_students (name TEXT PRIMARY KEY, score INTEGER)')\n"
+        "sheet = get_google_sheet('YOUR_SPREADSHEET_ID', \"'시트1'!A1:C4\")\n"
+        "rows = sheet['values']\n"
+        "headers = rows[0]\n"
+        "records = [dict(zip(headers, row)) for row in rows[1:] if len(row) == len(headers)]\n"
+        "students = [record for record in records if str(record.get('이름', '')).strip() and str(record.get('점수', '')).isdigit()]\n"
+        "try:\n"
+        "    for student in students:\n"
+        "        connection.execute('INSERT OR REPLACE INTO safe_students VALUES (?, ?)', (student['이름'], int(student['점수'])))\n"
+        "    connection.commit()\n"
+        "except Exception:\n"
+        "    connection.rollback()\n"
+        "    raise\n"
+        "count = connection.execute('SELECT COUNT(*) FROM safe_students').fetchone()[0]\n"
+        "print(f'안전 저장 완료: {count}명')\n"
+        "connection.close()",
+        "안전 저장 완료: 3명",
+    ),
+    "sheets-full-refresh": (
+        ["imports", "open-db", "begin-sync", "prepare-target", "read-range", "read-records", "guard-empty", "stage-rows", "remove-stale", "apply-snapshot", "commit-sync", "count-rows", "show-count", "close-db"],
+        "import sqlite3\n"
+        "from weblink_api import get_google_sheet\n"
+        "connection = sqlite3.connect('/data/students.db')\n"
+        "connection.execute('BEGIN')\n"
+        "try:\n"
+        "    connection.execute('CREATE TABLE IF NOT EXISTS safe_students (name TEXT PRIMARY KEY, score INTEGER)')\n"
+        "    sheet = get_google_sheet('YOUR_SPREADSHEET_ID', \"'시트1'!A1:C4\")\n"
+        "    rows = sheet['values']\n"
+        "    headers = rows[0]\n"
+        "    records = [dict(zip(headers, row)) for row in rows[1:] if len(row) == len(headers)]\n"
+        "    students = [record for record in records if str(record.get('이름', '')).strip() and str(record.get('점수', '')).isdigit()]\n"
+        "    if not students:\n"
+        "        raise ValueError('시트에 유효한 학생이 없어 동기화를 중단합니다.')\n"
+        "    connection.execute('CREATE TEMP TABLE IF NOT EXISTS current_students (name TEXT PRIMARY KEY, score INTEGER)')\n"
+        "    connection.execute('DELETE FROM current_students')\n"
+        "    for student in students:\n"
+        "        connection.execute('INSERT OR REPLACE INTO current_students VALUES (?, ?)', (student['이름'], int(student['점수'])))\n"
+        "    connection.execute('DELETE FROM safe_students WHERE name NOT IN (SELECT name FROM current_students)')\n"
+        "    connection.execute('INSERT OR REPLACE INTO safe_students SELECT * FROM current_students')\n"
+        "    connection.commit()\n"
+        "except Exception:\n"
+        "    connection.rollback()\n"
+        "    raise\n"
+        "count = connection.execute('SELECT COUNT(*) FROM safe_students').fetchone()[0]\n"
+        "print(f'시트와 동기화된 학생: {count}명')\n"
+        "connection.close()",
+        "시트와 동기화된 학생: 3명",
+    ),
+    "sheets-sync-summary": (
+        ["import-tools", "open-db", "create-table", "read-sheet", "prepare-records", "initialize-counts", "sync-counted", "commit", "show-summary", "close-db"],
+        "import sqlite3\n"
+        "from weblink_api import get_google_sheet\n"
+        "connection = sqlite3.connect('/data/students.db')\n"
+        "connection.execute('CREATE TABLE IF NOT EXISTS sheet_students (name TEXT PRIMARY KEY, score INTEGER)')\n"
+        "sheet = get_google_sheet('YOUR_SPREADSHEET_ID', \"'시트1'!A1:C4\")\n"
+        "rows = sheet['values']\n"
+        "headers = rows[0]\n"
+        "records = [dict(zip(headers, row)) for row in rows[1:] if len(row) == len(headers)]\n"
+        "students = [record for record in records if str(record.get('이름', '')).strip() and str(record.get('점수', '')).isdigit()]\n"
+        "inserted = updated = 0\n"
+        "for student in students:\n"
+        "    exists = connection.execute('SELECT 1 FROM sheet_students WHERE name = ?', (student['이름'],)).fetchone()\n"
+        "    connection.execute('INSERT OR REPLACE INTO sheet_students VALUES (?, ?)', (student['이름'], int(student['점수'])))\n"
+        "    if exists:\n"
+        "        updated += 1\n"
+        "    else:\n"
+        "        inserted += 1\n"
+        "connection.commit()\n"
+        "print(f'새로 저장: {inserted}명 · 갱신: {updated}명')\n"
+        "connection.close()",
+        "새로 저장: 3명 · 갱신: 0명",
+    ),
+    "sheets-verify-sync": (
+        ["import-sqlite", "open-db", "count-rows", "read-rows", "show-check", "close-db"],
+        "import sqlite3\n"
+        "connection = sqlite3.connect('/data/students.db')\n"
+        "count = connection.execute('SELECT COUNT(*) FROM sheet_students').fetchone()[0]\n"
+        "names = [row[0] for row in connection.execute('SELECT name FROM sheet_students ORDER BY name').fetchall()]\n"
+        "print('저장 확인:', count, '명 ·', ', '.join(names))\n"
+        "connection.close()",
+        "저장 확인: 3명 · 민지, 서준, 지우",
+    ),
+    "sheets-config-separation": (
+        ["settings", "import-reader", "read-configured-range", "show-range", "no-secret"],
+        "SPREADSHEET_ID = 'YOUR_SPREADSHEET_ID'\n"
+        "SHEET_RANGE = \"'시트1'!A1:C4\"\n"
+        "from weblink_api import get_google_sheet\n"
+        "sheet = get_google_sheet(SPREADSHEET_ID, SHEET_RANGE)\n"
+        "print(f\"읽은 범위: {sheet['range']}\")\n"
+        "print('OAuth 비밀값은 코드에 넣지 않습니다.')",
+        "읽은 범위: 시트1!A1:C4\nOAuth 비밀값은 코드에 넣지 않습니다.",
+    ),
 }
 
 

@@ -67,3 +67,39 @@ def test_project_file_paths_cannot_escape_project(client: TestClient) -> None:
         json={"expected_version": 0, "files": [{"path": "../outside.txt", "content": "unsafe"}]},
     )
     assert response.status_code == 422
+
+
+def test_saving_unchanged_draft_does_not_create_another_draft_version(client: TestClient) -> None:
+    signup(client, "draft-copy@example.com")
+    project = client.post("/api/v1/projects", json={"name": "Draft reuse"}).json()
+    files = project["files"]
+    first_save = client.put(
+        f"/api/v1/projects/{project['id']}/draft",
+        json={"expected_version": 0, "files": files},
+    )
+    assert first_save.status_code == 200
+    assert first_save.json()["draft_version"] == 0
+
+
+def test_project_owner_can_delete_project_and_enqueue_its_persistent_storage(client: TestClient) -> None:
+    signup(client, "delete-project@example.com")
+    project = client.post("/api/v1/projects", json={"name": "Remove me"}).json()
+    project_id = project["id"]
+
+    deleted = client.delete(f"/api/v1/projects/{project_id}")
+    assert deleted.status_code == 204
+    assert client.get(f"/api/v1/projects/{project_id}").status_code == 404
+    assert client.get("/api/v1/projects").json() == []
+
+
+def test_browser_can_preflight_project_draft_put_request(client: TestClient) -> None:
+    response = client.options(
+        "/api/v1/projects/00000000-0000-0000-0000-000000000000/draft",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "PUT",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+    assert response.status_code == 200
+    assert "PUT" in response.headers["access-control-allow-methods"]

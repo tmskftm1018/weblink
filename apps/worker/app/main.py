@@ -59,6 +59,38 @@ def claim_job() -> dict | None:
         return {**job, "lease_generation": generation, "attempt": job["attempt"] + 1}
 
 
+def cleanup_project_storage() -> None:
+    try:
+        client = docker.from_env()
+    except docker.errors.DockerException:
+        logger.exception("Could not connect to Docker while cleaning project storage")
+        return
+    try:
+        with engine.begin() as connection:
+            records = connection.execute(text("""
+                SELECT project_id FROM project_storage_cleanup
+                ORDER BY created_at
+                LIMIT 20
+                FOR UPDATE SKIP LOCKED
+            """)).all()
+            for (project_id,) in records:
+                volume_name = f"weblink-project-db-{str(project_id).replace('-', '')}"
+                try:
+                    client.volumes.get(volume_name).remove(force=True)
+                except docker.errors.NotFound:
+                    pass
+                except docker.errors.APIError:
+                    logger.exception("Project database volume cleanup will retry for %s", project_id)
+                    continue
+                connection.execute(text(
+                    "DELETE FROM project_storage_cleanup WHERE project_id=:project_id"
+                ), {"project_id": project_id})
+    except Exception:
+        logger.exception("Could not process project storage cleanup queue")
+    finally:
+        client.close()
+
+
 def heartbeat(job: dict) -> bool:
     with engine.begin() as connection:
         result = connection.execute(text("""
@@ -182,7 +214,9 @@ def execute(files: list[dict[str, str]], project_id: str, user_id: str) -> tuple
             volumes={api_socket_volume.name: {"bind": "/run/weblink", "mode": "rw"}},
             environment=google_connection or {},
             network_disabled=google_connection is None,
-            log_config=LogConfig(type="local", config={"max-size": "64k", "max-file": "1"}),
+            # Docker's local logging driver compresses rotated logs by default;
+            # rotation needs at least two files when compression is enabled.
+            log_config=LogConfig(type="local", config={"max-size": "64k", "max-file": "2"}),
         )
         api_container.start()
         staging = client.containers.create(
@@ -300,7 +334,11 @@ def process(job: dict) -> None:
 
 def main() -> None:
     logger.info("Execution worker started: %s", worker_id)
+    last_storage_cleanup = 0.0
     while True:
+        if time.monotonic() - last_storage_cleanup >= 10:
+            cleanup_project_storage()
+            last_storage_cleanup = time.monotonic()
         job = claim_job()
         if job is None:
             time.sleep(1)
