@@ -37,7 +37,7 @@ type Props = {
   onRename: (path: string) => void
   onDelete: (path: string) => void
   onMoveFile: (filePath: string, folderPath: string) => void
-  onImportFiles: (files: File[], folderPath: string) => void
+  onImportFiles: (items: DataTransferItem[], folderPath: string) => void
 }
 
 function ProjectFileTree({ tree, selectedPath, busy, onOpen, onRename, onDelete, onMoveFile, onImportFiles }: Props) {
@@ -77,12 +77,12 @@ function RootDropZone({ busy, onMoveFile, onImportFiles, children }: { busy: boo
     setDragOver(false)
     const path = internalFile ? event.dataTransfer.getData('application/x-weblink-project-file') : ''
     if (path) onMoveFile(path, '')
-    else if (event.dataTransfer.files.length) onImportFiles([...event.dataTransfer.files], '')
+    else if (event.dataTransfer.items.length) onImportFiles([...event.dataTransfer.items], '')
   }
   return <div className={`project-file-root-drop${dragOver ? ' project-file-root-drop-active' : ''}`} onDragOver={handleDragOver} onDragLeave={(event) => {
     if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragOver(false)
   }} onDrop={handleDrop}>
-    <div className="project-file-root-label"><span>프로젝트 루트</span><small>폴더의 파일을 꺼내거나 PC 파일을 가져오려면 여기로 끌어요</small></div>
+    <div className="project-file-root-label"><span>프로젝트 루트</span><small>폴더에서 꺼내거나 PC 파일·폴더를 가져오려면 여기로 끌어요</small></div>
     {children}
   </div>
 }
@@ -107,7 +107,10 @@ function FolderRow({ folder, selectedPath, busy, onOpen, onRename, onDelete, onM
     if (path) {
       if (detailsRef.current) detailsRef.current.open = true
       onMoveFile(path, folder.path)
-    } else if (event.dataTransfer.files.length) onImportFiles([...event.dataTransfer.files], folder.path)
+    } else if (event.dataTransfer.items.length) {
+      if (detailsRef.current) detailsRef.current.open = true
+      onImportFiles([...event.dataTransfer.items], folder.path)
+    }
   }
   return <div className={`file-folder${dragOver ? ' file-folder-drop-target' : ''}`} onDragOver={handleDragOver} onDragLeave={(event) => {
     if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragOver(false)

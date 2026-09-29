@@ -4,6 +4,7 @@ import { AttemptResult, Course, Lesson, learningService } from '../services/lear
 import { connectionService, GoogleConnectionStatus, GoogleSheetValues } from '../services/connections'
 import { ProjectSummary, ProjectVersion, ProjectVersionDetails, ProjectWorkspace, projectService } from '../services/projects'
 import { bindProjectDirectory, chooseProjectDirectory, getProjectDirectory, moveProjectFileInDirectory, ProjectDirectory, readProjectDirectory, removeProjectFileFromDirectory, unbindProjectDirectory, writeProjectDirectory } from '../services/localProjects'
+import { readDroppedProjectItems } from '../services/projectDropImport'
 import ProjectFileTree, { buildProjectFileTree } from './ProjectFileTree'
 
 type Mode = 'login' | 'signup'
@@ -1022,43 +1023,49 @@ export default function App() {
     }
   }
 
-  async function importDroppedFiles(droppedFiles: File[], folderPath: string) {
-    if (!workspace || !droppedFiles.length) return
+  async function importDroppedFiles(droppedItems: DataTransferItem[], folderPath: string) {
+    if (!workspace || !droppedItems.length) return
     const folderMarker = folderPath ? `${folderPath}/.gitkeep` : ''
     const existingFiles = workspace.files.filter((file) => !folderMarker || file.path !== folderMarker)
-    if (existingFiles.length + droppedFiles.length > 50) {
-      setProjectError('프로젝트에는 폴더 표시 파일을 포함해 최대 50개까지만 넣을 수 있어요.')
-      return
-    }
     setProjectBusy(true)
     setProjectError('')
     try {
-      const decoder = new TextDecoder('utf-8', { fatal: true })
+      const dropped = await readDroppedProjectItems(droppedItems)
       const addedFiles: ProjectWorkspace['files'] = []
-      let incomingBytes = 0
-      for (const file of droppedFiles) {
-        const name = file.name.trim()
-        const lowerName = name.toLocaleLowerCase()
-        const sensitive = lowerName === '.env' || (lowerName.startsWith('.env.') && lowerName !== '.env.example')
-          || ['id_rsa', 'id_ed25519', 'credentials.json', 'service-account.json'].includes(lowerName)
-          || /\.(pem|key|p12|pfx)$/i.test(name)
-        if (!name || name.includes('/') || name.includes('\\') || name.includes('\0') || name === '.' || name === '..'
-          || lowerName === '.git' || lowerName === '.gitkeep') {
-          throw new Error(`‘${name || '이름 없는 파일'}’은 프로젝트에 넣을 수 없는 이름입니다.`)
-        }
-        if (sensitive) throw new Error(`‘${name}’은 비밀 정보가 포함될 수 있어 가져오지 않았습니다.`)
-        if (file.size > 200_000) throw new Error(`‘${name}’ 파일이 200KB를 넘어 가져올 수 없습니다.`)
-        incomingBytes += file.size
-        const path = folderPath ? `${folderPath}/${name}` : name
-        let content: string
-        try {
-          content = decoder.decode(await file.arrayBuffer())
-        } catch {
-          throw new Error(`‘${name}’은 UTF-8 텍스트가 아니어서 가져올 수 없습니다.`)
-        }
-        const uniquePath = uniqueProjectPath(path, [...existingFiles, ...addedFiles], 'file')
-        addedFiles.push({ path: uniquePath, content })
+      const sourceFolders = new Set(dropped.emptyFolders)
+      for (const sourceFolder of dropped.emptyFolders) {
+        const segments = sourceFolder.split('/')
+        for (let index = 1; index < segments.length; index += 1) sourceFolders.add(segments.slice(0, index).join('/'))
       }
+      for (const file of dropped.files) {
+        const segments = file.path.split('/')
+        for (let index = 1; index < segments.length; index += 1) sourceFolders.add(segments.slice(0, index).join('/'))
+      }
+      const folderMap = new Map<string, string>()
+      const reservedFolders: ProjectWorkspace['files'] = []
+      for (const sourceFolder of [...sourceFolders].sort((left, right) => left.split('/').length - right.split('/').length || left.localeCompare(right))) {
+        const segments = sourceFolder.split('/')
+        const parentSource = segments.slice(0, -1).join('/')
+        const parentTarget = parentSource ? folderMap.get(parentSource) : folderPath
+        const segmentName = segments[segments.length - 1]!
+        const requestedFolder = parentTarget ? `${parentTarget}/${segmentName}` : segmentName
+        const targetFolder = uniqueProjectPath(requestedFolder, [...existingFiles, ...addedFiles, ...reservedFolders], 'folder')
+        folderMap.set(sourceFolder, targetFolder)
+        reservedFolders.push({ path: `${targetFolder}/.gitkeep`, content: '' })
+      }
+      for (const file of dropped.files) {
+        const segments = file.path.split('/')
+        const sourceParent = segments.slice(0, -1).join('/')
+        const targetParent = sourceParent ? folderMap.get(sourceParent) : folderPath
+        const filename = segments[segments.length - 1]!
+        const requestedPath = targetParent ? `${targetParent}/${filename}` : filename
+        const targetPath = uniqueProjectPath(requestedPath, [...existingFiles, ...addedFiles, ...reservedFolders], 'file')
+        addedFiles.push({ path: targetPath, content: file.content })
+      }
+      const emptyFolderMarkers = dropped.emptyFolders.map((sourceFolder) => ({ path: `${folderMap.get(sourceFolder)!}/.gitkeep`, content: '' }))
+      addedFiles.push(...emptyFolderMarkers)
+      if (existingFiles.length + addedFiles.length > 50) throw new Error('프로젝트 파일과 빈 폴더는 합쳐 최대 50개까지만 넣을 수 있어요.')
+      const incomingBytes = dropped.files.reduce((sum, file) => sum + new TextEncoder().encode(file.content).byteLength, 0)
       const currentBytes = existingFiles.reduce((sum, file) => sum + new TextEncoder().encode(file.content).byteLength, 0)
       if (currentBytes + incomingBytes > 1_000_000) throw new Error('프로젝트 파일 전체 용량은 1MB까지 지원합니다.')
       if (localProjectDirectory) {
@@ -1068,9 +1075,11 @@ export default function App() {
         }
       }
       setWorkspace({ ...workspace, files: [...existingFiles, ...addedFiles].sort((left, right) => left.path.localeCompare(right.path)) })
-      openProjectFile(addedFiles[0]?.path ?? '')
+      const firstFile = addedFiles.find((file) => !file.path.endsWith('/.gitkeep'))
+      if (firstFile) openProjectFile(firstFile.path)
       setProjectDirty(true)
-      setProjectNotice(`${addedFiles.length}개 파일을 ${folderPath ? `‘${folderPath}’ 폴더` : '프로젝트 루트'}에 추가했습니다. 저장하면 WebLink 초안에도 적용됩니다.`)
+      const skippedNotice = dropped.skippedSensitiveFiles ? ` 비밀 파일 ${dropped.skippedSensitiveFiles}개는 제외했어요.` : ''
+      setProjectNotice(`${dropped.files.length}개 파일과 빈 폴더 ${dropped.emptyFolders.length}개를 ${folderPath ? `‘${folderPath}’ 폴더` : '프로젝트 루트'}에 추가했습니다.${skippedNotice} 저장하면 WebLink 초안에도 적용됩니다.`)
     } catch (cause) {
       setProjectError(cause instanceof Error ? cause.message : '파일을 프로젝트에 추가하지 못했습니다.')
     } finally {
@@ -1624,7 +1633,7 @@ export default function App() {
             <div className="workspace-grid">
               <aside className="file-panel">
                 <div className="file-panel-heading"><p className="panel-label">파일 탐색기</p><button type="button" className="file-add-button" onClick={() => { setNewEntryPath(''); setNewEntryKind('auto'); setShowNewEntryForm((current) => !current) }} disabled={projectBusy} aria-label="새 파일 또는 폴더 만들기" title="새 파일 또는 폴더 만들기">＋</button></div>
-                <ProjectFileTree tree={projectFileTree} selectedPath={selectedPath} busy={projectBusy} onOpen={openProjectFile} onRename={(path) => void renameProjectFile(path)} onDelete={(path) => void deleteProjectFile(path)} onMoveFile={(path, folder) => void moveProjectFileToFolder(path, folder)} onImportFiles={(files, folder) => void importDroppedFiles(files, folder)} />
+                <ProjectFileTree tree={projectFileTree} selectedPath={selectedPath} busy={projectBusy} onOpen={openProjectFile} onRename={(path) => void renameProjectFile(path)} onDelete={(path) => void deleteProjectFile(path)} onMoveFile={(path, folder) => void moveProjectFileToFolder(path, folder)} onImportFiles={(items, folder) => void importDroppedFiles(items, folder)} />
                 {showNewEntryForm && <form className="new-entry-form" onSubmit={createProjectEntry}>
                   <label>파일 또는 폴더 경로<input autoFocus value={newEntryPath} onChange={(event) => setNewEntryPath(event.target.value)} placeholder="예: src/main.py 또는 src" required maxLength={240} /></label>
                   <label>항목 종류<select value={newEntryKind} onChange={(event) => setNewEntryKind(event.target.value as NewProjectEntryKind)}><option value="auto">자동 판단{newEntryPath.trim() ? ` · ${inferProjectEntryKind(newEntryPath) === 'file' ? '파일' : '폴더'}` : ''}</option><option value="file">파일</option><option value="folder">폴더</option></select></label>
