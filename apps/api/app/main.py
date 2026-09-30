@@ -11,6 +11,7 @@ from app.api.v1.health import router as health_router
 from app.api.v1.learning import router as learning_router
 from app.api.v1.projects import router as projects_router
 from app.api.v1.runs import router as runs_router
+from app.api.v1.tasks import router as tasks_router
 from app.api.v1.versions import router as versions_router
 from app.core.config import settings
 
@@ -30,6 +31,7 @@ app.include_router(runs_router, prefix="/api/v1")
 app.include_router(debugging_router, prefix="/api/v1")
 app.include_router(ai_router, prefix="/api/v1")
 app.include_router(versions_router, prefix="/api/v1")
+app.include_router(tasks_router, prefix="/api/v1")
 app.include_router(connections_router, prefix="/api/v1")
 
 

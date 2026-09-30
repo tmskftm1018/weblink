@@ -11,6 +11,7 @@ from app.schemas.versions import (
     ProjectVersionCreate,
     ProjectVersionDetailResponse,
     ProjectVersionResponse,
+    VersionRestoreRequest,
     VersionRestoreResponse,
 )
 from app.services import versions as version_service
@@ -80,10 +81,14 @@ def delete_version(project_id: UUID, version_id: UUID, db: SessionDep, user: Cur
     "/{project_id}/versions/{version_id}/restore", response_model=VersionRestoreResponse
 )
 def restore_version(
-    project_id: UUID, version_id: UUID, db: SessionDep, user: CurrentUser
+    project_id: UUID,
+    version_id: UUID,
+    payload: VersionRestoreRequest,
+    db: SessionDep,
+    user: CurrentUser,
 ) -> VersionRestoreResponse:
     try:
-        return version_service.restore_version(db, user, project_id, version_id)
+        return version_service.restore_version(db, user, project_id, version_id, payload)
     except (version_service.ProjectNotFound, version_service.VersionNotFound) as exc:
         raise HTTPException(status_code=404, detail="Version not found") from exc
     except version_service.ProjectReadOnly as exc:

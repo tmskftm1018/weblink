@@ -10,6 +10,7 @@ from app.schemas.versions import (
     ProjectVersionCreate,
     ProjectVersionDetailResponse,
     ProjectVersionResponse,
+    VersionRestoreRequest,
     VersionRestoreResponse,
 )
 
@@ -125,7 +126,7 @@ def delete_version(db: Session, user: User, project_id: UUID, version_id: UUID) 
 
 
 def restore_version(
-    db: Session, user: User, project_id: UUID, version_id: UUID
+    db: Session, user: User, project_id: UUID, version_id: UUID, payload: VersionRestoreRequest
 ) -> VersionRestoreResponse:
     project, role = repository.get_access(db, project_id, user.id)
     if project is None:
@@ -141,6 +142,8 @@ def restore_version(
     draft = repository.get_draft(db, project_id)
     if source_revision is None or draft is None:
         raise VersionNotFound
+    if draft.version != payload.expected_draft_version:
+        raise DraftConflict
     snapshot = source_revision.snapshot
     if not repository.advance_draft(db, project_id, draft.version, user.id):
         db.rollback()

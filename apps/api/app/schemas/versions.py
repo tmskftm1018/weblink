@@ -28,6 +28,7 @@ class ProjectVersionResponse(BaseModel):
     name: str
     description: str
     runtime_spec: RuntimeSpec
+    created_by: UUID
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -42,3 +43,7 @@ class VersionRestoreResponse(BaseModel):
     restored_revision_id: UUID
     restored_revision_number: int
     draft_version: int
+
+
+class VersionRestoreRequest(BaseModel):
+    expected_draft_version: int = Field(ge=0)

@@ -36,15 +36,17 @@ type Props = {
   onOpen: (path: string) => void
   onRename: (path: string) => void
   onDelete: (path: string) => void
+  onRenameFolder: (path: string) => void
+  onDeleteFolder: (path: string) => void
   onMoveFile: (filePath: string, folderPath: string) => void
   onImportFiles: (items: DataTransferItem[], folderPath: string) => void
 }
 
-function ProjectFileTree({ tree, selectedPath, busy, onOpen, onRename, onDelete, onMoveFile, onImportFiles }: Props) {
+function ProjectFileTree({ tree, selectedPath, busy, onOpen, onRename, onDelete, onRenameFolder, onDeleteFolder, onMoveFile, onImportFiles }: Props) {
   const folders = [...tree.folders.values()].sort((left, right) => left.name.localeCompare(right.name))
   const files = [...tree.files].sort((left, right) => left.path.localeCompare(right.path))
   const contents = <>
-    {folders.map((folder) => <FolderRow key={folder.path} folder={folder} selectedPath={selectedPath} busy={busy} onOpen={onOpen} onRename={onRename} onDelete={onDelete} onMoveFile={onMoveFile} onImportFiles={onImportFiles} />)}
+    {folders.map((folder) => <FolderRow key={folder.path} folder={folder} selectedPath={selectedPath} busy={busy} onOpen={onOpen} onRename={onRename} onDelete={onDelete} onRenameFolder={onRenameFolder} onDeleteFolder={onDeleteFolder} onMoveFile={onMoveFile} onImportFiles={onImportFiles} />)}
     {files.filter((file) => !file.path.endsWith('/.gitkeep') && file.path !== '.gitkeep').map((file) => <div className="file-entry" key={file.path}>
       <button className={`file-row ${selectedPath === file.path ? 'active' : ''}`} type="button" draggable={!busy} onDragStart={(event) => {
         event.dataTransfer.setData('application/x-weblink-project-file', file.path)
@@ -71,6 +73,7 @@ function RootDropZone({ busy, onMoveFile, onImportFiles, children }: { busy: boo
     setDragOver(true)
   }
   function handleDrop(event: DragEvent<HTMLDivElement>) {
+    if (busy) return
     const internalFile = event.dataTransfer.types.includes('application/x-weblink-project-file')
     if (!internalFile && !event.dataTransfer.types.includes('Files')) return
     event.preventDefault()
@@ -87,7 +90,7 @@ function RootDropZone({ busy, onMoveFile, onImportFiles, children }: { busy: boo
   </div>
 }
 
-function FolderRow({ folder, selectedPath, busy, onOpen, onRename, onDelete, onMoveFile, onImportFiles }: Omit<Props, 'tree'> & { folder: ProjectFileTreeNode }) {
+function FolderRow({ folder, selectedPath, busy, onOpen, onRename, onDelete, onRenameFolder, onDeleteFolder, onMoveFile, onImportFiles }: Omit<Props, 'tree'> & { folder: ProjectFileTreeNode }) {
   const detailsRef = useRef<HTMLDetailsElement>(null)
   const [dragOver, setDragOver] = useState(false)
   function handleDragOver(event: DragEvent<HTMLDivElement>) {
@@ -98,6 +101,7 @@ function FolderRow({ folder, selectedPath, busy, onOpen, onRename, onDelete, onM
     setDragOver(true)
   }
   function handleDrop(event: DragEvent<HTMLDivElement>) {
+    if (busy) return
     const internalFile = event.dataTransfer.types.includes('application/x-weblink-project-file')
     if (!internalFile && !event.dataTransfer.types.includes('Files')) return
     event.preventDefault()
@@ -120,8 +124,10 @@ function FolderRow({ folder, selectedPath, busy, onOpen, onRename, onDelete, onM
         <summary className="file-folder-summary" title={folder.path}>
           <span className="file-folder-caret" aria-hidden="true">›</span><span className="file-folder-icon" aria-hidden="true">▰</span><span className="file-folder-name">{folder.name}</span>
         </summary>
-        <div className="file-folder-children"><ProjectFileTree tree={folder} selectedPath={selectedPath} busy={busy} onOpen={onOpen} onRename={onRename} onDelete={onDelete} onMoveFile={onMoveFile} onImportFiles={onImportFiles} /></div>
+        <div className="file-folder-children"><ProjectFileTree tree={folder} selectedPath={selectedPath} busy={busy} onOpen={onOpen} onRename={onRename} onDelete={onDelete} onRenameFolder={onRenameFolder} onDeleteFolder={onDeleteFolder} onMoveFile={onMoveFile} onImportFiles={onImportFiles} /></div>
       </details>
+      <button type="button" className="folder-action-button" onClick={() => onRenameFolder(folder.path)} disabled={busy} aria-label={`${folder.path} 폴더 이름 변경`} title="폴더 이름 변경">✎</button>
+      <button type="button" className="folder-delete-button" onClick={() => onDeleteFolder(folder.path)} disabled={busy} aria-label={`${folder.path} 폴더와 내용 삭제`} title="폴더와 안의 파일 삭제">×</button>
     </div>
   </div>
 }

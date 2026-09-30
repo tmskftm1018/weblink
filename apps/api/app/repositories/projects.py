@@ -3,13 +3,14 @@ from uuid import UUID
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
+from app.models.auth import User
 from app.models.projects import Project, ProjectDraft, ProjectFile, ProjectMember, ProjectRevision
 
 
-def list_for_user(db: Session, user_id: UUID) -> list[tuple[Project, ProjectDraft]]:
+def list_for_user(db: Session, user_id: UUID) -> list[tuple[Project, ProjectDraft, str]]:
     return list(
         db.execute(
-            select(Project, ProjectDraft)
+            select(Project, ProjectDraft, ProjectMember.role)
             .join(ProjectMember, ProjectMember.project_id == Project.id)
             .join(ProjectDraft, ProjectDraft.project_id == Project.id)
             .where(ProjectMember.user_id == user_id)
@@ -25,6 +26,28 @@ def get_access(db: Session, project_id: UUID, user_id: UUID) -> tuple[Project | 
         .where(Project.id == project_id, ProjectMember.user_id == user_id)
     ).first()
     return (row[0], row[1]) if row else (None, None)
+
+
+def list_members(db: Session, project_id: UUID) -> list[tuple[ProjectMember, User]]:
+    return list(
+        db.execute(
+            select(ProjectMember, User)
+            .join(User, User.id == ProjectMember.user_id)
+            .where(ProjectMember.project_id == project_id)
+            .order_by(ProjectMember.created_at, User.email)
+        ).all()
+    )
+
+
+def find_active_user_by_email(db: Session, email: str) -> User | None:
+    return db.scalar(select(User).where(func.lower(User.email) == email, User.is_active.is_(True)))
+
+
+def get_member(db: Session, project_id: UUID, user_id: UUID) -> ProjectMember | None:
+    return db.scalar(select(ProjectMember).where(
+        ProjectMember.project_id == project_id,
+        ProjectMember.user_id == user_id,
+    ))
 
 
 def get_draft(db: Session, project_id: UUID) -> ProjectDraft | None:

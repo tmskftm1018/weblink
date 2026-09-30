@@ -39,6 +39,8 @@ def create_run(
         )
     except execution_service.ProjectNotFound as exc:
         raise HTTPException(status_code=404, detail="Project not found") from exc
+    except execution_service.ProjectReadOnly as exc:
+        raise HTTPException(status_code=403, detail="보기 전용 권한으로는 프로젝트를 실행할 수 없습니다.") from exc
     except execution_service.RevisionNotFound as exc:
         raise HTTPException(status_code=404, detail="Revision not found") from exc
     except execution_service.IdempotencyConflict as exc:

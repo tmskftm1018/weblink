@@ -18,7 +18,36 @@ export type ProjectSummary = {
   description: string
   draft_version: number
   updated_at: string
+  role: 'OWNER' | 'EDITOR' | 'VIEWER'
 }
+export type ProjectMember = {
+  user_id: string
+  email: string
+  display_name: string
+  role: 'OWNER' | 'EDITOR' | 'VIEWER'
+  created_at: string
+}
+export type ProjectTaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE'
+export type ProjectTaskPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT'
+export type ProjectTask = {
+  id: string
+  project_id: string
+  title: string
+  description: string
+  status: ProjectTaskStatus
+  priority: ProjectTaskPriority
+  due_date: string | null
+  assignee_id: string | null
+  created_by: string
+  updated_by: string | null
+  created_at: string
+  updated_at: string
+}
+export type TaskComment = { id: string; task_id: string; author_id: string | null; author_name: string; body: string; created_at: string }
+export type TaskActivity = { id: string; task_id: string; actor_id: string | null; actor_name: string; message: string; created_at: string }
+export type ProjectTaskActivity = TaskActivity & { task_title: string }
+export type TaskDiscussion = { comments: TaskComment[]; activities: TaskActivity[] }
+export type TaskChecklistItem = { id: string; task_id: string; text: string; position: number; completed: boolean; completed_by: string | null; completed_at: string | null; created_by: string; created_at: string }
 export type ProjectFile = { path: string; content: string }
 export type ProjectRevision = {
   id: string
@@ -31,6 +60,7 @@ export type ProjectVersion = {
   id: string; project_id: string; version_number: number; source_revision_id: string
   name: string; description: string
   runtime_spec: { language: 'python'; version: '3.12'; dependencies: string[] }
+  created_by: string
   created_at: string
 }
 export type ProjectVersionDetails = ProjectVersion & { files: ProjectFile[] }
@@ -56,7 +86,7 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
       : Array.isArray(payload?.detail)
         ? payload.detail.map((item) => item && typeof item === 'object' && 'msg' in item ? String(item.msg) : '').filter(Boolean).join(' ')
         : ''
-    if (detail.includes('Draft changed')) throw new Error('초안이 다른 곳에서 변경됐습니다. 최신 초안을 불러온 뒤 다시 저장해 주세요.')
+    if (detail.includes('Draft changed')) throw new Error('초안이 다른 곳에서 변경됐습니다. 최신 초안을 불러온 뒤 내용을 확인하고 다시 시도해 주세요.')
     if (detail.includes('safe relative path')) throw new Error('파일 경로는 프로젝트 폴더 안의 안전한 상대 경로여야 합니다.')
     if (detail.includes('duplicate file paths')) throw new Error('파일 경로가 중복되었습니다.')
     if (detail.includes('exceed 1 MB')) throw new Error('초안 파일 전체 크기는 1MB 이하여야 합니다.')
@@ -71,8 +101,36 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
 export const projectService = {
   list: () => request<ProjectSummary[]>(''),
   create: (data: { name: string; description: string }) => request<ProjectWorkspace>('', 'POST', data),
+  update: (projectId: string, data: { name: string; description: string }) => request<ProjectWorkspace>(`/${projectId}`, 'PUT', data),
   get: (projectId: string) => request<ProjectWorkspace>(`/${projectId}`),
   delete: (projectId: string) => request<void>(`/${projectId}`, 'DELETE'),
+  listMembers: (projectId: string) => request<ProjectMember[]>(`/${projectId}/members`),
+  listTasks: (projectId: string) => request<ProjectTask[]>(`/${projectId}/tasks`),
+  createTask: (projectId: string, data: { title: string; description: string; assignee_id: string | null; priority: ProjectTaskPriority; due_date: string | null }) =>
+    request<ProjectTask>(`/${projectId}/tasks`, 'POST', data),
+  updateTask: (projectId: string, task: ProjectTask, changes: Partial<Pick<ProjectTask, 'title' | 'description' | 'status' | 'assignee_id' | 'priority' | 'due_date'>>) =>
+    request<ProjectTask>(`/${projectId}/tasks/${task.id}`, 'PUT', {
+      title: changes.title ?? task.title,
+      description: changes.description ?? task.description,
+      status: changes.status ?? task.status,
+      priority: changes.priority ?? task.priority,
+      due_date: changes.due_date === undefined ? task.due_date : changes.due_date,
+      assignee_id: changes.assignee_id === undefined ? task.assignee_id : changes.assignee_id,
+    }),
+  deleteTask: (projectId: string, taskId: string) => request<void>(`/${projectId}/tasks/${taskId}`, 'DELETE'),
+  listTaskActivity: (projectId: string) => request<ProjectTaskActivity[]>(`/${projectId}/tasks/activity`),
+  getTaskDiscussion: (projectId: string, taskId: string) => request<TaskDiscussion>(`/${projectId}/tasks/${taskId}/discussion`),
+  addTaskComment: (projectId: string, taskId: string, body: string) => request<TaskComment>(`/${projectId}/tasks/${taskId}/comments`, 'POST', { body }),
+  listTaskChecklist: (projectId: string, taskId: string) => request<TaskChecklistItem[]>(`/${projectId}/tasks/${taskId}/checklist`),
+  addTaskChecklistItem: (projectId: string, taskId: string, text: string) => request<TaskChecklistItem>(`/${projectId}/tasks/${taskId}/checklist`, 'POST', { text }),
+  updateTaskChecklistItem: (projectId: string, taskId: string, itemId: string, completed: boolean) => request<TaskChecklistItem>(`/${projectId}/tasks/${taskId}/checklist/${itemId}`, 'PUT', { completed }),
+  deleteTaskChecklistItem: (projectId: string, taskId: string, itemId: string) => request<void>(`/${projectId}/tasks/${taskId}/checklist/${itemId}`, 'DELETE'),
+  addMember: (projectId: string, email: string, role: 'EDITOR' | 'VIEWER') =>
+    request<ProjectMember>(`/${projectId}/members`, 'POST', { email, role }),
+  updateMemberRole: (projectId: string, userId: string, role: 'EDITOR' | 'VIEWER') =>
+    request<ProjectMember>(`/${projectId}/members/${userId}`, 'PUT', { role }),
+  removeMember: (projectId: string, userId: string) =>
+    request<void>(`/${projectId}/members/${userId}`, 'DELETE'),
   async exportArchive(projectId: string, projectName: string): Promise<void> {
     const response = await fetch(`${apiBaseUrl}/api/v1/projects/${projectId}/export`, { credentials: 'include' })
     if (!response.ok) {
@@ -118,8 +176,8 @@ export const projectService = {
     request<void>(`/${projectId}/versions/${versionId}`, 'DELETE'),
   getVersion: (projectId: string, versionId: string) =>
     request<ProjectVersionDetails>(`/${projectId}/versions/${versionId}`),
-  async restoreVersion(projectId: string, versionId: string): Promise<{ restored_revision_id: string; restored_revision_number: number; draft_version: number }> {
-    return request<{ restored_revision_id: string; restored_revision_number: number; draft_version: number }>(`/${projectId}/versions/${versionId}/restore`, 'POST')
+  async restoreVersion(projectId: string, versionId: string, expectedDraftVersion: number): Promise<{ restored_revision_id: string; restored_revision_number: number; draft_version: number }> {
+    return request<{ restored_revision_id: string; restored_revision_number: number; draft_version: number }>(`/${projectId}/versions/${versionId}/restore`, 'POST', { expected_draft_version: expectedDraftVersion })
   },
   async run(projectId: string, revisionId: string): Promise<RunResult> {
     const response = await fetch(`${apiBaseUrl}/api/v1/projects/${projectId}/runs`, {

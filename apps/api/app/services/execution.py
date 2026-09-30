@@ -16,6 +16,10 @@ class ProjectNotFound(Exception):
     pass
 
 
+class ProjectReadOnly(Exception):
+    pass
+
+
 class RevisionNotFound(Exception):
     pass
 
@@ -40,9 +44,11 @@ def create_run(
     revision_id: UUID,
     idempotency_key: str,
 ) -> tuple[RunResponse, bool]:
-    project, _role = project_repository.get_access(db, project_id, user.id)
+    project, role = project_repository.get_access(db, project_id, user.id)
     if project is None:
         raise ProjectNotFound
+    if role not in {"OWNER", "EDITOR"}:
+        raise ProjectReadOnly
     source_revision = repository.get_revision(db, project_id, revision_id)
     if source_revision is None:
         raise RevisionNotFound

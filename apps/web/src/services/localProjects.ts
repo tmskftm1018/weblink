@@ -199,6 +199,34 @@ export async function removeProjectFileFromDirectory(directory: ProjectDirectory
   }
 }
 
+export async function removeEmptyProjectDirectoryFromDirectory(directory: ProjectDirectory, path: string): Promise<void> {
+  validatePath(path)
+  if (path.split('/').some((segment) => segment.toLowerCase() === '.git')) {
+    throw new Error('Git 저장소 내부 폴더는 WebLink에서 삭제할 수 없습니다.')
+  }
+  await ensurePermission(directory)
+  const chain: Array<{ parent: FileSystemDirectoryHandle; name: string }> = []
+  let current = directory
+  for (const name of path.split('/')) {
+    const parent = current
+    try {
+      current = await parent.getDirectoryHandle(name)
+    } catch (cause) {
+      if (cause instanceof DOMException && ['NotFoundError', 'TypeMismatchError'].includes(cause.name)) return
+      throw cause
+    }
+    chain.push({ parent, name })
+  }
+  for (const { parent, name } of chain.reverse()) {
+    try {
+      await parent.removeEntry(name)
+    } catch (cause) {
+      if (cause instanceof DOMException && ['NotFoundError', 'InvalidModificationError'].includes(cause.name)) continue
+      throw cause
+    }
+  }
+}
+
 export async function moveProjectFileInDirectory(
   directory: ProjectDirectory,
   oldPath: string,
@@ -241,4 +269,57 @@ export async function moveProjectFileInDirectory(
   const excluded = await writeProjectDirectory(directory, [{ path: newPath, content }])
   if (excluded) throw new Error('비밀 파일 경로는 프로젝트 파일 이름으로 사용할 수 없습니다.')
   await removeProjectFileFromDirectory(directory, oldPath)
+}
+
+export async function moveProjectFilesInDirectory(
+  directory: ProjectDirectory,
+  moves: Array<{ oldPath: string; newPath: string; content: string }>,
+): Promise<void> {
+  if (!moves.length) return
+  await ensurePermission(directory)
+  const sourcePaths = new Set(moves.map((move) => move.oldPath.toLocaleLowerCase()))
+  const targetPaths = new Set<string>()
+  for (const move of moves) {
+    validatePath(move.oldPath)
+    validatePath(move.newPath)
+    if (isSensitive(move.oldPath) || isSensitive(move.newPath)) throw new Error('비밀 파일 경로는 WebLink에서 이름을 바꿀 수 없습니다.')
+    if ([move.oldPath, move.newPath].some((path) => path.split('/').some((segment) => segment.toLowerCase() === '.git'))) {
+      throw new Error('Git 저장소 내부 파일은 WebLink에서 이름을 바꿀 수 없습니다.')
+    }
+    const normalizedTarget = move.newPath.toLocaleLowerCase()
+    if (targetPaths.has(normalizedTarget)) throw new Error(`이동 후 파일 경로가 겹칩니다: ${move.newPath}`)
+    targetPaths.add(normalizedTarget)
+    if (normalizedTarget === move.oldPath.toLocaleLowerCase()) throw new Error('대소문자만 바꾸는 이름 변경은 아직 지원하지 않습니다.')
+  }
+  for (const move of moves) {
+    if (sourcePaths.has(move.newPath.toLocaleLowerCase())) throw new Error(`이동 대상이 현재 프로젝트 파일과 겹칩니다: ${move.newPath}`)
+    const segments = move.newPath.split('/')
+    let current = directory
+    let parentMissing = false
+    for (const segment of segments.slice(0, -1)) {
+      try {
+        current = await current.getDirectoryHandle(segment)
+      } catch (cause) {
+        if (cause instanceof DOMException && cause.name === 'NotFoundError') {
+          parentMissing = true
+          break
+        }
+        if (cause instanceof DOMException && cause.name === 'TypeMismatchError') {
+          throw new Error(`연결된 폴더에 ${move.newPath} 경로가 이미 있어 이름을 바꾸지 않았습니다.`)
+        }
+        throw cause
+      }
+    }
+    if (parentMissing) continue
+    try {
+      await current.getFileHandle(segments[segments.length - 1]!)
+      throw new Error(`연결된 폴더에 ${move.newPath} 파일이 이미 있어 덮어쓰지 않았습니다.`)
+    } catch (cause) {
+      if (cause instanceof Error && cause.message.startsWith('연결된 폴더에 ')) throw cause
+      if (!(cause instanceof DOMException) || !['NotFoundError', 'TypeMismatchError'].includes(cause.name)) throw cause
+      if (cause.name === 'TypeMismatchError') throw new Error(`연결된 폴더에 ${move.newPath} 경로가 이미 있어 이름을 바꾸지 않았습니다.`)
+    }
+  }
+  await writeProjectDirectory(directory, moves.map((move) => ({ path: move.newPath, content: move.content })))
+  for (const move of moves) await removeProjectFileFromDirectory(directory, move.oldPath)
 }

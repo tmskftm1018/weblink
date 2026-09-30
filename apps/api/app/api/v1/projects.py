@@ -12,7 +12,11 @@ from app.schemas.projects import (
     CreateRevisionResponse,
     DraftSavedResponse,
     ProjectCreateRequest,
+    ProjectMemberAddRequest,
+    ProjectMemberResponse,
+    ProjectMemberRoleUpdateRequest,
     ProjectSummaryResponse,
+    ProjectUpdateRequest,
     ProjectWorkspaceResponse,
     SaveDraftRequest,
 )
@@ -31,6 +35,21 @@ def list_projects(db: SessionDep, user: CurrentUser) -> list[ProjectSummaryRespo
 @router.post("", response_model=ProjectWorkspaceResponse, status_code=status.HTTP_201_CREATED)
 def create_project(payload: ProjectCreateRequest, db: SessionDep, user: CurrentUser) -> ProjectWorkspaceResponse:
     return project_service.create_project(db, user, payload)
+
+
+@router.put("/{project_id}", response_model=ProjectWorkspaceResponse)
+def update_project(
+    project_id: UUID,
+    payload: ProjectUpdateRequest,
+    db: SessionDep,
+    user: CurrentUser,
+) -> ProjectWorkspaceResponse:
+    try:
+        return project_service.update_project(db, user, project_id, payload)
+    except project_service.ProjectNotFound as exc:
+        raise HTTPException(status_code=404, detail="프로젝트를 찾지 못했습니다.") from exc
+    except project_service.ProjectOwnerRequired as exc:
+        raise HTTPException(status_code=403, detail="프로젝트 소유자만 이름과 설명을 바꿀 수 있습니다.") from exc
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -91,6 +110,77 @@ def get_project(project_id: UUID, db: SessionDep, user: CurrentUser) -> ProjectW
         return project_service.get_workspace(db, user, project_id)
     except project_service.ProjectNotFound as exc:
         raise HTTPException(status_code=404, detail="Project not found") from exc
+
+
+@router.get("/{project_id}/members", response_model=list[ProjectMemberResponse])
+def list_project_members(project_id: UUID, db: SessionDep, user: CurrentUser) -> list[ProjectMemberResponse]:
+    try:
+        return project_service.list_project_members(db, user, project_id)
+    except project_service.ProjectNotFound as exc:
+        raise HTTPException(status_code=404, detail="Project not found") from exc
+
+
+@router.post(
+    "/{project_id}/members",
+    response_model=ProjectMemberResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def add_project_member(
+    project_id: UUID,
+    payload: ProjectMemberAddRequest,
+    db: SessionDep,
+    user: CurrentUser,
+) -> ProjectMemberResponse:
+    try:
+        return project_service.add_project_member(db, user, project_id, payload)
+    except project_service.ProjectNotFound as exc:
+        raise HTTPException(status_code=404, detail="프로젝트를 찾지 못했습니다.") from exc
+    except project_service.ProjectOwnerRequired as exc:
+        raise HTTPException(status_code=403, detail="프로젝트 소유자만 팀원을 관리할 수 있습니다.") from exc
+    except project_service.ProjectUserNotFound as exc:
+        raise HTTPException(status_code=404, detail="해당 이메일로 가입한 WebLink 계정을 찾지 못했습니다.") from exc
+    except project_service.ProjectMemberAlreadyExists as exc:
+        raise HTTPException(status_code=409, detail="이미 이 프로젝트의 팀원입니다.") from exc
+
+
+@router.delete("/{project_id}/members/{member_user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_project_member(
+    project_id: UUID,
+    member_user_id: UUID,
+    db: SessionDep,
+    user: CurrentUser,
+) -> Response:
+    try:
+        project_service.remove_project_member(db, user, project_id, member_user_id)
+    except project_service.ProjectNotFound as exc:
+        raise HTTPException(status_code=404, detail="프로젝트를 찾지 못했습니다.") from exc
+    except project_service.ProjectOwnerRequired as exc:
+        raise HTTPException(status_code=403, detail="프로젝트 소유자만 팀원을 관리할 수 있습니다.") from exc
+    except project_service.ProjectMemberNotFound as exc:
+        raise HTTPException(status_code=404, detail="팀원을 찾지 못했습니다.") from exc
+    except project_service.ProjectOwnerCannotBeRemoved as exc:
+        raise HTTPException(status_code=400, detail="프로젝트 소유자는 팀원에서 제외할 수 없습니다.") from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.put("/{project_id}/members/{member_user_id}", response_model=ProjectMemberResponse)
+def update_project_member_role(
+    project_id: UUID,
+    member_user_id: UUID,
+    payload: ProjectMemberRoleUpdateRequest,
+    db: SessionDep,
+    user: CurrentUser,
+) -> ProjectMemberResponse:
+    try:
+        return project_service.update_project_member_role(db, user, project_id, member_user_id, payload)
+    except project_service.ProjectNotFound as exc:
+        raise HTTPException(status_code=404, detail="프로젝트를 찾지 못했습니다.") from exc
+    except project_service.ProjectOwnerRequired as exc:
+        raise HTTPException(status_code=403, detail="프로젝트 소유자만 팀원 권한을 바꿀 수 있습니다.") from exc
+    except project_service.ProjectMemberNotFound as exc:
+        raise HTTPException(status_code=404, detail="팀원을 찾지 못했습니다.") from exc
+    except project_service.ProjectOwnerCannotBeRemoved as exc:
+        raise HTTPException(status_code=400, detail="프로젝트 소유자의 권한은 바꿀 수 없습니다.") from exc
 
 
 @router.get("/{project_id}/export")

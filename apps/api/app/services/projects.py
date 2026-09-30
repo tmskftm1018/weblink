@@ -9,6 +9,7 @@ import zlib
 from pathlib import PurePosixPath
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.auth import User
@@ -22,6 +23,7 @@ from app.models.projects import (
     ProjectRevision,
     ProjectVersion,
 )
+from app.models.tasks import ProjectTask, ProjectTaskActivity
 from app.repositories import projects as repository
 from app.schemas.projects import (
     CreateRevisionResponse,
@@ -29,9 +31,13 @@ from app.schemas.projects import (
     ProjectCreateRequest,
     ProjectFileInput,
     ProjectFileResponse,
+    ProjectMemberAddRequest,
+    ProjectMemberResponse,
+    ProjectMemberRoleUpdateRequest,
     ProjectRevisionResponse,
     ProjectSummaryResponse,
     ProjectWorkspaceResponse,
+    ProjectUpdateRequest,
     SaveDraftRequest,
 )
 
@@ -63,6 +69,26 @@ class InvalidProjectArchive(Exception):
     pass
 
 
+class ProjectMemberNotFound(Exception):
+    pass
+
+
+class ProjectMemberAlreadyExists(Exception):
+    pass
+
+
+class ProjectUserNotFound(Exception):
+    pass
+
+
+class ProjectOwnerRequired(Exception):
+    pass
+
+
+class ProjectOwnerCannotBeRemoved(Exception):
+    pass
+
+
 def delete_project(db: Session, user: User, project_id: UUID) -> None:
     project, role = repository.get_access(db, project_id, user.id)
     if project is None:
@@ -76,6 +102,7 @@ def delete_project(db: Session, user: User, project_id: UUID) -> None:
     db.query(DebugSession).filter(DebugSession.project_id == project_id).delete(synchronize_session=False)
     db.query(Run).filter(Run.project_id == project_id).delete(synchronize_session=False)
     db.query(ProjectVersion).filter(ProjectVersion.project_id == project_id).delete(synchronize_session=False)
+    db.query(ProjectTask).filter(ProjectTask.project_id == project_id).delete(synchronize_session=False)
     db.query(ExecutionSnapshot).filter(ExecutionSnapshot.project_id == project_id).delete(synchronize_session=False)
     db.query(ProjectRevision).filter(ProjectRevision.project_id == project_id).delete(synchronize_session=False)
     db.query(ProjectFile).filter(ProjectFile.project_id == project_id).delete(synchronize_session=False)
@@ -103,8 +130,9 @@ def list_projects(db: Session, user: User) -> list[ProjectSummaryResponse]:
             description=project.description,
             draft_version=draft.version,
             updated_at=project.updated_at,
+            role=role,
         )
-        for project, draft in repository.list_for_user(db, user.id)
+        for project, draft, role in repository.list_for_user(db, user.id)
     ]
 
 
@@ -123,8 +151,23 @@ def create_project(db: Session, user: User, payload: ProjectCreateRequest) -> Pr
     return get_workspace(db, user, project.id)
 
 
+def update_project(
+    db: Session, user: User, project_id: UUID, payload: ProjectUpdateRequest
+) -> ProjectWorkspaceResponse:
+    project, role = repository.get_access(db, project_id, user.id)
+    if project is None:
+        raise ProjectNotFound
+    if role != "OWNER" or project.owner_id != user.id:
+        raise ProjectOwnerRequired
+    project.name = payload.name
+    project.description = payload.description
+    repository.save(db)
+    db.refresh(project)
+    return get_workspace(db, user, project_id)
+
+
 def get_workspace(db: Session, user: User, project_id: UUID) -> ProjectWorkspaceResponse:
-    project, _ = repository.get_access(db, project_id, user.id)
+    project, role = repository.get_access(db, project_id, user.id)
     if project is None:
         raise ProjectNotFound
     draft = repository.get_draft(db, project.id)
@@ -136,9 +179,103 @@ def get_workspace(db: Session, user: User, project_id: UUID) -> ProjectWorkspace
         description=project.description,
         draft_version=draft.version,
         updated_at=project.updated_at,
+        role=role,
         files=[ProjectFileResponse(path=file.path, content=file.content) for file in repository.list_files(db, project.id)],
         revisions=[ProjectRevisionResponse.model_validate(revision) for revision in repository.list_revisions(db, project.id)],
     )
+
+
+def _member_response(member: ProjectMember, user: User) -> ProjectMemberResponse:
+    return ProjectMemberResponse(
+        user_id=user.id,
+        email=user.email,
+        display_name=user.display_name,
+        role=member.role,
+        created_at=member.created_at,
+    )
+
+
+def list_project_members(db: Session, user: User, project_id: UUID) -> list[ProjectMemberResponse]:
+    project, _role = repository.get_access(db, project_id, user.id)
+    if project is None:
+        raise ProjectNotFound
+    return [_member_response(member, member_user) for member, member_user in repository.list_members(db, project_id)]
+
+
+def add_project_member(
+    db: Session,
+    user: User,
+    project_id: UUID,
+    payload: ProjectMemberAddRequest,
+) -> ProjectMemberResponse:
+    project, role = repository.get_access(db, project_id, user.id)
+    if project is None:
+        raise ProjectNotFound
+    if role != 'OWNER' or project.owner_id != user.id:
+        raise ProjectOwnerRequired
+    member_user = repository.find_active_user_by_email(db, payload.email)
+    if member_user is None:
+        raise ProjectUserNotFound
+    if repository.get_member(db, project_id, member_user.id) is not None:
+        raise ProjectMemberAlreadyExists
+    member = ProjectMember(project_id=project_id, user_id=member_user.id, role=payload.role)
+    db.add(member)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise ProjectMemberAlreadyExists from exc
+    db.refresh(member)
+    return _member_response(member, member_user)
+
+
+def remove_project_member(db: Session, user: User, project_id: UUID, member_user_id: UUID) -> None:
+    project, role = repository.get_access(db, project_id, user.id)
+    if project is None:
+        raise ProjectNotFound
+    if role != 'OWNER' or project.owner_id != user.id:
+        raise ProjectOwnerRequired
+    member = repository.get_member(db, project_id, member_user_id)
+    if member is None:
+        raise ProjectMemberNotFound
+    if member.role == 'OWNER' or member.user_id == project.owner_id:
+        raise ProjectOwnerCannotBeRemoved
+    assigned_tasks = db.query(ProjectTask).filter(
+        ProjectTask.project_id == project_id,
+        ProjectTask.assignee_id == member_user_id,
+    ).all()
+    for task in assigned_tasks:
+        task.assignee_id = None
+        task.updated_by = user.id
+        db.add(ProjectTaskActivity(task_id=task.id, actor_id=user.id, message="팀원 제외로 담당자가 해제됐습니다."))
+    db.delete(member)
+    db.commit()
+
+
+def update_project_member_role(
+    db: Session,
+    user: User,
+    project_id: UUID,
+    member_user_id: UUID,
+    payload: ProjectMemberRoleUpdateRequest,
+) -> ProjectMemberResponse:
+    project, role = repository.get_access(db, project_id, user.id)
+    if project is None:
+        raise ProjectNotFound
+    if role != "OWNER" or project.owner_id != user.id:
+        raise ProjectOwnerRequired
+    member = repository.get_member(db, project_id, member_user_id)
+    if member is None:
+        raise ProjectMemberNotFound
+    if member.role == "OWNER" or member.user_id == project.owner_id:
+        raise ProjectOwnerCannotBeRemoved
+    member.role = payload.role
+    db.commit()
+    db.refresh(member)
+    member_user = db.get(User, member_user_id)
+    if member_user is None:
+        raise ProjectMemberNotFound
+    return _member_response(member, member_user)
 
 
 def export_project_archive(db: Session, user: User, project_id: UUID) -> tuple[bytes, str]:

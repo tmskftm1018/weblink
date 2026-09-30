@@ -1,8 +1,12 @@
 from datetime import datetime
+import re
 from pathlib import PurePosixPath
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+_EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 class ProjectCreateRequest(BaseModel):
@@ -16,6 +20,10 @@ class ProjectCreateRequest(BaseModel):
         if not normalized:
             raise ValueError("Project name must not be blank")
         return normalized
+
+
+class ProjectUpdateRequest(ProjectCreateRequest):
+    pass
 
 
 class ProjectFileInput(BaseModel):
@@ -63,6 +71,7 @@ class ProjectSummaryResponse(BaseModel):
     description: str
     draft_version: int
     updated_at: datetime
+    role: Literal['OWNER', 'EDITOR', 'VIEWER']
 
 
 class ProjectWorkspaceResponse(ProjectSummaryResponse):
@@ -79,3 +88,28 @@ class DraftSavedResponse(BaseModel):
 class CreateRevisionResponse(BaseModel):
     revision: ProjectRevisionResponse
     created: bool
+
+
+class ProjectMemberAddRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    role: Literal['EDITOR', 'VIEWER'] = 'EDITOR'
+
+    @field_validator('email')
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if not _EMAIL_PATTERN.fullmatch(normalized):
+            raise ValueError('Enter a valid email address')
+        return normalized
+
+
+class ProjectMemberRoleUpdateRequest(BaseModel):
+    role: Literal['EDITOR', 'VIEWER']
+
+
+class ProjectMemberResponse(BaseModel):
+    user_id: UUID
+    email: str
+    display_name: str
+    role: Literal['OWNER', 'EDITOR', 'VIEWER']
+    created_at: datetime

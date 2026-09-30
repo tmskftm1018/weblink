@@ -19,6 +19,7 @@ from app.models.projects import (
     ProjectRevision,
     ProjectVersion,
 )
+from app.models.tasks import ProjectTask, ProjectTaskActivity, ProjectTaskChecklistItem, ProjectTaskComment
 
 __all__ = [
     "AIChange",
@@ -45,6 +46,10 @@ __all__ = [
     "ProjectRevision",
     "ProjectStorageCleanup",
     "ProjectVersion",
+    "ProjectTask",
+    "ProjectTaskActivity",
+    "ProjectTaskChecklistItem",
+    "ProjectTaskComment",
     "Run",
     "User",
     "UserSession",
