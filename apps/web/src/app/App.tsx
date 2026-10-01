@@ -2788,13 +2788,13 @@ export default function App() {
 
   if (loading) return <main className="welcome"><p className="status">WebLink를 준비하고 있어요…</p></main>
 
-  if (!user && showLanding) return <LandingPage onEnter={(nextMode) => { setMode(nextMode); setError(''); setShowLanding(false) }} />
+  if (showLanding) return <LandingPage isAuthenticated={Boolean(user)} onEnter={(nextMode) => { setMode(nextMode); setError(''); setShowLanding(false) }} />
 
   if (user) {
     return (
       <div className="learning-shell">
         <header className="learning-topbar">
-          <div className="topbar-brand"><div className="brand-mark small" aria-hidden="true">W</div><span>WebLink</span></div>
+          <button className="topbar-brand" type="button" onClick={() => setShowLanding(true)} aria-label="WebLink 홈페이지"><div className="brand-mark small" aria-hidden="true">W</div><span>WebLink</span></button>
           <nav className="topbar-nav" aria-label="주요 메뉴">
             <button className={view === 'lesson' ? 'active' : ''} type="button" onClick={showLesson} disabled={projectBusy}>배우기</button>
             <button className={view === 'projects' || view === 'workspace' ? 'active' : ''} type="button" onClick={showProjects} disabled={projectBusy}>내 프로젝트</button>

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 
-type LandingPageProps = { onEnter: (mode: 'login' | 'signup') => void }
+type LandingPageProps = { onEnter: (mode: 'login' | 'signup') => void; isAuthenticated?: boolean }
 
 const capabilities = [
   { number: '01', title: '블록으로 배우기', copy: '순서를 맞추고 실행 흐름을 익히며 Python의 기초를 연습해요.', tag: 'LEARN' },
@@ -17,7 +17,7 @@ const stackGroups = [
   { number: '05', category: '실행 환경', items: ['Docker'] },
 ]
 
-export default function LandingPage({ onEnter }: LandingPageProps) {
+export default function LandingPage({ onEnter, isAuthenticated = false }: LandingPageProps) {
   const moving = useRef(false)
   const unlockTimer = useRef<number | null>(null)
   const lockUntil = useRef(0)
@@ -115,7 +115,7 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
           <button type="button" onClick={() => goTo('features')}>기능</button>
           <button type="button" onClick={() => goTo('stack')}>기술 스택</button>
         </nav>
-        <button className="landing-login" type="button" onClick={() => onEnter('login')}>로그인 <span aria-hidden="true">↗</span></button>
+        <button className="landing-login" type="button" onClick={() => onEnter('login')}>{isAuthenticated ? '내 프로젝트' : '로그인'} <span aria-hidden="true">↗</span></button>
       </header>
 
       <main className="landing-sections">
@@ -134,7 +134,7 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
             <div className="about-copy">
               <p className="about-lead">문법을 익힌 다음 무엇을 만들 수 있을까요?</p>
               <p>WebLink는 블록 코딩으로 시작해 Python 프로젝트를 직접 만들고 실행하는 교육용 개발 공간입니다. 파일을 편집하고, 팀과 작업을 나누고, API와 데이터베이스를 연결하며 코드가 실제로 쓰이는 과정을 배워요.</p>
-              <button className="landing-inline-link" type="button" onClick={() => onEnter('signup')}>학습 여정 시작하기 <span aria-hidden="true">↗</span></button>
+              <button className="landing-inline-link" type="button" onClick={() => onEnter(isAuthenticated ? 'login' : 'signup')}>{isAuthenticated ? '내 프로젝트로 돌아가기' : '학습 여정 시작하기'} <span aria-hidden="true">↗</span></button>
             </div>
             <div className="journey-line" aria-label="WebLink의 학습 흐름">
               {['블록 학습', '코드 작성', '프로젝트 실행', '데이터 연결'].map((step, index) => <div className="journey-step" key={step}><span>0{index + 1}</span><strong>{step}</strong>{index < 3 && <i aria-hidden="true">→</i>}</div>)}
@@ -150,13 +150,13 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
               <p>필요한 기능을 골라 시작하고,<br />하나의 프로젝트에서 차근차근 연결해 보세요.</p>
             </div>
             <div className="feature-grid">
-              {capabilities.map((feature) => <button className="feature-card" type="button" key={feature.number} onClick={() => onEnter('signup')}>
+              {capabilities.map((feature) => <button className="feature-card" type="button" key={feature.number} onClick={() => onEnter(isAuthenticated ? 'login' : 'signup')}>
                 <span className="feature-top"><span>{feature.number}</span><span className="feature-arrow" aria-hidden="true">↗</span></span>
                 <span className="feature-tag">{feature.tag}</span>
                 <strong>{feature.title}</strong><span className="feature-copy">{feature.copy}</span>
               </button>)}
             </div>
-            <p className="feature-footnote">모든 기능은 프로젝트를 중심으로 이어집니다. <button type="button" onClick={() => onEnter('signup')}>직접 둘러보기 ↗</button></p>
+            <p className="feature-footnote">모든 기능은 프로젝트를 중심으로 이어집니다. <button type="button" onClick={() => onEnter(isAuthenticated ? 'login' : 'signup')}>{isAuthenticated ? '내 프로젝트 열기' : '직접 둘러보기'} ↗</button></p>
           </div>
           <div className="section-counter"><span>03</span> / 04</div>
         </section>
@@ -171,7 +171,7 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
                 <div className="stack-group-items">{group.items.map((name) => <span className="stack-item" key={name}>{name}</span>)}</div>
               </section>)}
             </div>
-            <div className="stack-cta"><div><span className="landing-kicker">YOUR NEXT STEP</span><strong>이제 직접 만들어 볼 차례예요.</strong></div><button className="landing-primary" type="button" onClick={() => onEnter('signup')}>WebLink 시작하기 <span aria-hidden="true">→</span></button></div>
+            <div className="stack-cta"><div><span className="landing-kicker">YOUR NEXT STEP</span><strong>이제 직접 만들어 볼 차례예요.</strong></div><button className="landing-primary" type="button" onClick={() => onEnter(isAuthenticated ? 'login' : 'signup')}>{isAuthenticated ? '내 프로젝트로 돌아가기' : 'WebLink 시작하기'} <span aria-hidden="true">→</span></button></div>
           </div>
           <footer className="landing-footer"><a href="#home" onClick={(event) => { event.preventDefault(); goTo('home') }}>WebLink <span>© 2026</span></a><span>배우고, 만들고, 연결해요.</span></footer>
           <div className="section-counter"><span>04</span> / 04</div>
