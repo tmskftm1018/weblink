@@ -7,6 +7,7 @@ import { bindProjectDirectory, chooseProjectDirectory, getProjectDirectory, move
 import { readDroppedProjectItems } from '../services/projectDropImport'
 import ProjectFileTree, { buildProjectFileTree } from './ProjectFileTree'
 import ProjectReadmePreview from './ProjectReadmePreview'
+import LandingPage from './LandingPage'
 
 type Mode = 'login' | 'signup'
 type View = 'lesson' | 'projects' | 'workspace' | 'connections'
@@ -87,6 +88,7 @@ function extractGoogleSpreadsheetId(value: string): string | null {
 export default function App() {
   const [user, setUser] = useState<User | null>(null)
   const [mode, setMode] = useState<Mode>('signup')
+  const [showLanding, setShowLanding] = useState(true)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -2307,6 +2309,8 @@ export default function App() {
 
   if (loading) return <main className="welcome"><p className="status">WebLink를 준비하고 있어요…</p></main>
 
+  if (!user && showLanding) return <LandingPage onEnter={(nextMode) => { setMode(nextMode); setError(''); setShowLanding(false) }} />
+
   if (user) {
     return (
       <div className="learning-shell">
@@ -2703,6 +2707,7 @@ export default function App() {
 
   return (
     <main className="welcome auth-page">
+      <button className="auth-home-link" type="button" onClick={() => setShowLanding(true)}>← WebLink 홈</button>
       <div className="brand-mark" aria-hidden="true">W</div>
       <p className="eyebrow">LEARN BY BUILDING</p>
       <h1>{mode === 'signup' ? '배우고, 만들고, 이해해요.' : '다시 만나 반가워요.'}</h1>
