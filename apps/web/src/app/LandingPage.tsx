@@ -21,14 +21,56 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
   const moving = useRef(false)
   const unlockTimer = useRef<number | null>(null)
   const lockUntil = useRef(0)
+  const animationFrame = useRef<number | null>(null)
+  const savedScrollStyles = useRef<{ behavior: string; snap: string } | null>(null)
+  const restoreScrollStyles = () => {
+    if (!savedScrollStyles.current) return
+    document.documentElement.style.scrollBehavior = savedScrollStyles.current.behavior
+    document.documentElement.style.scrollSnapType = savedScrollStyles.current.snap
+    savedScrollStyles.current = null
+  }
   const goTo = (id: string) => {
     const section = document.getElementById(id)
     if (!section) return
     moving.current = true
-    lockUntil.current = Date.now() + 450
-    section.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    if (animationFrame.current !== null) window.cancelAnimationFrame(animationFrame.current)
     if (unlockTimer.current !== null) window.clearTimeout(unlockTimer.current)
-    unlockTimer.current = window.setTimeout(() => { moving.current = false }, 520)
+    if (!savedScrollStyles.current) {
+      savedScrollStyles.current = {
+        behavior: document.documentElement.style.scrollBehavior,
+        snap: document.documentElement.style.scrollSnapType,
+      }
+    }
+    document.documentElement.style.scrollBehavior = 'auto'
+    document.documentElement.style.scrollSnapType = 'none'
+
+    const startY = window.scrollY
+    const targetY = Math.max(0, window.scrollY + section.getBoundingClientRect().top)
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const duration = reducedMotion ? 0 : 880
+    lockUntil.current = Date.now() + duration
+    if (duration === 0) {
+      window.scrollTo(0, targetY)
+      restoreScrollStyles()
+    } else {
+      const startTime = performance.now()
+      const animate = (time: number) => {
+        const progress = Math.min(1, (time - startTime) / duration)
+        const eased = progress < 0.5
+          ? 4 * progress * progress * progress
+          : 1 - Math.pow(-2 * progress + 2, 3) / 2
+        window.scrollTo(0, startY + (targetY - startY) * eased)
+        if (progress < 1) {
+          animationFrame.current = window.requestAnimationFrame(animate)
+        } else {
+          animationFrame.current = null
+          restoreScrollStyles()
+        }
+      }
+      animationFrame.current = window.requestAnimationFrame(animate)
+    }
+    if (unlockTimer.current !== null) window.clearTimeout(unlockTimer.current)
+    unlockTimer.current = window.setTimeout(() => { moving.current = false }, duration + 100)
   }
 
   useEffect(() => {
@@ -57,6 +99,8 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
     return () => {
       window.removeEventListener('wheel', onWheel)
       if (unlockTimer.current !== null) window.clearTimeout(unlockTimer.current)
+      if (animationFrame.current !== null) window.cancelAnimationFrame(animationFrame.current)
+      restoreScrollStyles()
     }
   }, [])
 
