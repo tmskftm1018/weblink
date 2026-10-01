@@ -85,6 +85,82 @@ def request_google_sheet(spreadsheet_id: str, sheet_range: str) -> tuple[int, di
     return HTTPStatus.OK, {"range": payload.get("range", sheet_range), "majorDimension": "ROWS", "values": values}
 
 
+def write_google_sheet(spreadsheet_id: str, sheet_range: str, values: object) -> tuple[int, dict[str, object]]:
+    global google_access_token, google_access_token_expires
+    client_id = os.environ.get("WEBLINK_GOOGLE_CLIENT_ID", "")
+    client_secret = os.environ.get("WEBLINK_GOOGLE_CLIENT_SECRET", "")
+    refresh_token = os.environ.get("WEBLINK_GOOGLE_REFRESH_TOKEN", "")
+    if not client_id or not client_secret or not refresh_token:
+        return HTTPStatus.SERVICE_UNAVAILABLE, {"error": "Google connection is not available"}
+    if not spreadsheet_id_pattern.fullmatch(spreadsheet_id) or not sheet_range_pattern.fullmatch(sheet_range):
+        return HTTPStatus.BAD_REQUEST, {"error": "invalid spreadsheet id or cell range"}
+    if (
+        not isinstance(values, list)
+        or not values
+        or len(values) > 10_000
+        or any(not isinstance(row, list) or not row or len(row) > 256 for row in values)
+        or any(not isinstance(cell, (str, int, float, bool)) or (isinstance(cell, str) and len(cell) > 20_000) for row in values if isinstance(row, list) for cell in row)
+    ):
+        return HTTPStatus.BAD_REQUEST, {"error": "values must contain at most 10,000 rows and 256 supported cells per row"}
+    if google_access_token_expires <= time.monotonic():
+        form = urlencode({
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "refresh_token": refresh_token,
+            "grant_type": "refresh_token",
+        }).encode()
+        request = Request(
+            "https://oauth2.googleapis.com/token",
+            data=form,
+            headers={"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"},
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=5) as response:
+                token_payload = json.loads(response.read(65_537))
+        except Exception:
+            return HTTPStatus.BAD_GATEWAY, {"error": "Could not refresh Google access"}
+        access_token = token_payload.get("access_token") if isinstance(token_payload, dict) else None
+        if not isinstance(access_token, str) or len(access_token) > 8192:
+            return HTTPStatus.UNAUTHORIZED, {"error": "Google connection needs to be reconnected"}
+        google_access_token = access_token
+        try:
+            expires_in = int(token_payload.get("expires_in", 300))
+        except (TypeError, ValueError):
+            expires_in = 300
+        google_access_token_expires = time.monotonic() + max(min(expires_in, 3600) - 30, 30)
+
+    encoded_id = quote(spreadsheet_id, safe="")
+    encoded_range = quote(sheet_range, safe="!:$'")
+    url = f"https://sheets.googleapis.com/v4/spreadsheets/{encoded_id}/values/{encoded_range}?valueInputOption=RAW"
+    body = json.dumps({"majorDimension": "ROWS", "values": values}, ensure_ascii=False).encode("utf-8")
+    if len(body) > 1_000_000:
+        return HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"error": "Google write exceeds the 1 MB request limit"}
+    request = Request(
+        url,
+        data=body,
+        headers={"Authorization": f"Bearer {google_access_token}", "Accept": "application/json", "Content-Type": "application/json"},
+        method="PUT",
+    )
+    try:
+        with urlopen(request, timeout=8) as response:
+            payload = json.loads(response.read(65_537))
+    except Exception as exc:
+        status_code = getattr(exc, "code", None)
+        if status_code in (400, 401, 403, 404, 429):
+            return int(status_code), {"error": "Google Sheets write was rejected; check range and spreadsheet edit access"}
+        return HTTPStatus.BAD_GATEWAY, {"error": "Google Sheets could not be reached"}
+    if not isinstance(payload, dict):
+        return HTTPStatus.BAD_GATEWAY, {"error": "Google returned an invalid write response"}
+    return HTTPStatus.OK, {
+        "spreadsheetId": payload.get("spreadsheetId", spreadsheet_id),
+        "updatedRange": payload.get("updatedRange", sheet_range),
+        "updatedRows": payload.get("updatedRows", 0),
+        "updatedColumns": payload.get("updatedColumns", 0),
+        "updatedCells": payload.get("updatedCells", 0),
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         global retry_attempts
@@ -189,6 +265,27 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json(HTTPStatus.CREATED, {"created": True, "student": student})
 
     def do_PUT(self) -> None:
+        parsed_path = urlsplit(self.path)
+        path_parts = parsed_path.path.split("/")
+        if len(path_parts) == 6 and path_parts[1:3] == ["google", "sheets"] and path_parts[4] == "values":
+            if parsed_path.query:
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": "query parameters are not supported"})
+                return
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+                if not 0 < content_length <= 1_000_000:
+                    self.send_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"error": "request exceeds 1 MB"})
+                    return
+                payload = json.loads(self.rfile.read(content_length))
+            except (ValueError, json.JSONDecodeError):
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid JSON"})
+                return
+            if not isinstance(payload, dict):
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": "JSON object is required"})
+                return
+            response_status, result = write_google_sheet(path_parts[3], unquote(path_parts[5]), payload.get("values"))
+            self.send_json(response_status, result)
+            return
         student_id = self.path.removeprefix("/students/")
         if not student_id.isdigit() or int(student_id) not in students:
             self.send_json(HTTPStatus.NOT_FOUND, {"error": "student not found"})

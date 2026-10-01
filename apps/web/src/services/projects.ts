@@ -27,6 +27,10 @@ export type ProjectMember = {
   role: 'OWNER' | 'EDITOR' | 'VIEWER'
   created_at: string
 }
+export type ProjectTeamActivity = { id: string; project_id: string; actor_id: string | null; actor_name: string; message: string; created_at: string }
+export type ProjectInvitation = { token: string; email: string; project_name: string; expires_at: string; email_status: 'sent' | 'not_configured' | 'failed' }
+export type ManagedProjectInvitation = { id: string; email: string; role: 'EDITOR' | 'VIEWER'; expires_at: string; created_at: string; status: 'PENDING' | 'EXPIRED' }
+export type AcceptedProjectInvitation = { project_id: string; project_name: string }
 export type ProjectTaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE'
 export type ProjectTaskPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT'
 export type ProjectTask = {
@@ -66,6 +70,8 @@ export type ProjectVersion = {
 export type ProjectVersionDetails = ProjectVersion & { files: ProjectFile[] }
 export type ProjectWorkspace = ProjectSummary & { files: ProjectFile[]; revisions: ProjectRevision[] }
 export type RevisionResult = { revision: ProjectRevision; created: boolean }
+export type ProjectGitHubSource = { connected: boolean; token_connected: boolean; status_message: string | null; repository_url: string | null; branch: string | null; is_private: boolean; imported_sha: string | null; latest_sha: string | null; update_available: boolean }
+export type ProjectGitHubPullResult = { workspace: ProjectWorkspace; imported_sha: string; backup_version_name: string | null }
 
 async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   let response: Response
@@ -103,8 +109,11 @@ export const projectService = {
   create: (data: { name: string; description: string }) => request<ProjectWorkspace>('', 'POST', data),
   update: (projectId: string, data: { name: string; description: string }) => request<ProjectWorkspace>(`/${projectId}`, 'PUT', data),
   get: (projectId: string) => request<ProjectWorkspace>(`/${projectId}`),
+  githubSource: (projectId: string) => request<ProjectGitHubSource>(`/${projectId}/github`),
+  pullGithubUpdates: (projectId: string, expectedDraftVersion: number) => request<ProjectGitHubPullResult>(`/${projectId}/github/pull`, 'POST', { expected_draft_version: expectedDraftVersion }),
   delete: (projectId: string) => request<void>(`/${projectId}`, 'DELETE'),
   listMembers: (projectId: string) => request<ProjectMember[]>(`/${projectId}/members`),
+  listTeamActivity: (projectId: string) => request<ProjectTeamActivity[]>(`/${projectId}/team-activity`),
   listTasks: (projectId: string) => request<ProjectTask[]>(`/${projectId}/tasks`),
   createTask: (projectId: string, data: { title: string; description: string; assignee_id: string | null; priority: ProjectTaskPriority; due_date: string | null }) =>
     request<ProjectTask>(`/${projectId}/tasks`, 'POST', data),
@@ -127,6 +136,12 @@ export const projectService = {
   deleteTaskChecklistItem: (projectId: string, taskId: string, itemId: string) => request<void>(`/${projectId}/tasks/${taskId}/checklist/${itemId}`, 'DELETE'),
   addMember: (projectId: string, email: string, role: 'EDITOR' | 'VIEWER') =>
     request<ProjectMember>(`/${projectId}/members`, 'POST', { email, role }),
+  createInvitation: (projectId: string, email: string, role: 'EDITOR' | 'VIEWER') =>
+    request<ProjectInvitation>(`/${projectId}/invitations`, 'POST', { email, role }),
+  listInvitations: (projectId: string) => request<ManagedProjectInvitation[]>(`/${projectId}/invitations`),
+  revokeInvitation: (projectId: string, invitationId: string) => request<void>(`/${projectId}/invitations/${invitationId}`, 'DELETE'),
+  acceptInvitation: (token: string) =>
+    request<AcceptedProjectInvitation>('/invitations/accept', 'POST', { token }),
   updateMemberRole: (projectId: string, userId: string, role: 'EDITOR' | 'VIEWER') =>
     request<ProjectMember>(`/${projectId}/members/${userId}`, 'PUT', { role }),
   removeMember: (projectId: string, userId: string) =>
@@ -161,6 +176,21 @@ export const projectService = {
       throw new Error(payload?.detail ?? 'ZIP 파일을 프로젝트로 가져오지 못했습니다.')
     }
     return response.json() as Promise<ProjectWorkspace>
+  },
+  async importGithubRepository(projectName: string, repositoryUrl: string): Promise<ProjectWorkspace> {
+    const query = new URLSearchParams({ name: projectName, repository_url: repositoryUrl })
+    const response = await fetch(`${apiBaseUrl}/api/v1/projects/import/github?${query}`, { method: 'POST', credentials: 'include' })
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null) as { detail?: string } | null
+      throw new Error(payload?.detail ?? 'GitHub 저장소를 가져오지 못했습니다.')
+    }
+    return response.json() as Promise<ProjectWorkspace>
+  },
+  importFile(projectName: string, filePath: string, content: string): Promise<ProjectWorkspace> {
+    return request<ProjectWorkspace>('/import/file', 'POST', { name: projectName, file: { path: filePath, content } })
+  },
+  importFiles(projectName: string, files: ProjectFile[]): Promise<ProjectWorkspace> {
+    return request<ProjectWorkspace>('/import/files', 'POST', { name: projectName, files })
   },
   saveDraft: (projectId: string, expectedVersion: number, files: ProjectFile[]) =>
     request<{ project_id: string; draft_version: number; updated_at: string }>(`/${projectId}/draft`, 'PUT', {

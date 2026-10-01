@@ -1,6 +1,6 @@
 from app.models.ai import AIChange, AIConversation, AIMessage, AIProvider, AIRequest
 from app.models.auth import AuthIdentity, User, UserSession
-from app.models.connections import GoogleConnection, GoogleOAuthState
+from app.models.connections import GitHubConnection, GoogleConnection, GoogleOAuthState
 from app.models.debugging import DebugSession
 from app.models.execution import ExecutionSnapshot, Job, ProjectStorageCleanup, Run
 from app.models.learning import (
@@ -15,8 +15,11 @@ from app.models.projects import (
     Project,
     ProjectDraft,
     ProjectFile,
+    ProjectGitHubSource,
+    ProjectInvitation,
     ProjectMember,
     ProjectRevision,
+    ProjectTeamActivity,
     ProjectVersion,
 )
 from app.models.tasks import ProjectTask, ProjectTaskActivity, ProjectTaskChecklistItem, ProjectTaskComment
@@ -33,6 +36,7 @@ __all__ = [
     "DebugSession",
     "ExecutionSnapshot",
     "GoogleConnection",
+    "GitHubConnection",
     "GoogleOAuthState",
     "Job",
     "LearningEvidence",
@@ -42,8 +46,11 @@ __all__ = [
     "Project",
     "ProjectDraft",
     "ProjectFile",
+    "ProjectGitHubSource",
+    "ProjectInvitation",
     "ProjectMember",
     "ProjectRevision",
+    "ProjectTeamActivity",
     "ProjectStorageCleanup",
     "ProjectVersion",
     "ProjectTask",

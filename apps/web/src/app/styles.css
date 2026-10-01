@@ -150,9 +150,19 @@ h1 { max-width: 660px; margin: 0; font: 700 clamp(38px, 6vw, 62px)/1.08 'Segoe U
 .topbar-nav button:disabled { cursor: wait; opacity: .55; }
 .project-list-main, .workspace-main { width: min(var(--page-max), 100%); margin: 0 auto; padding: 48px var(--page-gutter) 88px; }
 .project-heading { max-width: 630px; }
+.project-heading-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
+.project-list-actions { display: flex; flex: 0 0 auto; gap: 9px; }
+.project-list-actions .primary-button, .project-list-actions .secondary-button { min-height: 42px; padding-inline: 16px; }
 .project-heading .eyebrow { margin: 0 0 10px; text-align: left; }
 .project-heading h1, .workspace-heading h1 { margin: 0; font: 700 clamp(32px, 4vw, 44px)/1.1 'Segoe UI', sans-serif; letter-spacing: -.04em; }
 .project-heading > p:last-child { margin: 13px 0 0; color: #718076; font-size: 14px; line-height: 1.7; }
+.project-storage-disclosure { margin-top: 22px; }
+.project-storage-disclosure > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 15px; border: 1px solid #e4eae3; border-radius: 10px; background: #fafcf9; color: #435548; cursor: pointer; list-style: none; font-size: 12px; font-weight: 650; }
+.project-storage-disclosure > summary::-webkit-details-marker { display: none; }
+.project-storage-disclosure > summary::after { content: '＋'; margin-left: auto; color: #65816a; font-size: 16px; }
+.project-storage-disclosure[open] > summary::after { content: '−'; }
+.project-storage-disclosure > summary small { color: #849087; font-size: 10px; font-weight: 450; }
+.project-storage-disclosure .project-storage-hub { margin-top: 8px; }
 .project-storage-hub { margin-top: 28px; padding: clamp(18px, 2vw, 28px); border: 1px solid #dfe8df; border-radius: 17px; background: linear-gradient(140deg, #f9fcf7, #eff6f0); box-shadow: 0 8px 28px #233c2d08; }
 .storage-hub-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .storage-hub-heading .eyebrow { margin: 0 0 5px; color: #5a8064; font-size: 10px; font-weight: 700; letter-spacing: .08em; }
@@ -168,15 +178,22 @@ h1 { max-width: 660px; margin: 0; font: 700 clamp(38px, 6vw, 62px)/1.08 'Segoe U
 .planned-provider { background: #fbfcfa; border-style: dashed; }
 .planned-provider .storage-provider-icon { background: #f0f1ed; color: #858a7e; }
 .storage-hub-note { margin: 14px 0 0; color: #68756b; font-size: 10px; line-height: 1.65; }
-.project-list-layout { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(340px, .82fr); gap: clamp(20px, 2.4vw, 36px); margin-top: 28px; align-items: start; }
+.project-list-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; margin-top: 24px; align-items: start; }
 .project-cards-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-.project-cards-heading h2 { margin: 0; font: 700 18px 'Segoe UI', sans-serif; }
-.project-search input { width: 190px; padding: 9px 11px; border: 1px solid #dce3dc; border-radius: 8px; outline: none; color: #26342a; font: 11px 'Segoe UI', sans-serif; }
+.project-list-controls { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.project-cards-heading h2 { margin: 0 !important; font: 700 18px 'Segoe UI', sans-serif; }
+.project-count { display: inline-grid; min-width: 23px; height: 23px; margin-left: 5px; padding: 0 5px; place-items: center; border-radius: 12px; background: #edf3ec; color: #56745c; font-size: 11px; vertical-align: 2px; }
+.project-search input, .project-select-label select { min-height: 36px; padding: 8px 10px; border: 1px solid #dce3dc; border-radius: 8px; outline: none; background: #fff; color: #435449; font: 11px 'Segoe UI', sans-serif; }
+.project-search input { width: 190px; }
+.project-select-label select { cursor: pointer; }
 .project-search input:focus { border-color: #518767; box-shadow: 0 0 0 3px #51876720; }
+.project-select-label select:focus { border-color: #518767; box-shadow: 0 0 0 3px #51876720; }
 .project-cards h2, .project-create-form h2 { margin: 0 0 17px; font: 700 18px 'Segoe UI', sans-serif; }
+.project-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 430px), 1fr)); gap: 10px; }
 .project-card { width: 100%; display: flex; gap: 14px; align-items: flex-start; margin-bottom: 10px; padding: 18px; border: 1px solid var(--color-border); border-radius: 14px; background: var(--color-surface); color: #293a2e; cursor: pointer; text-align: left; box-shadow: 0 2px 8px #233c2d05; }
-.project-card-entry { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.project-card-entry { min-width: 0; display: flex; align-items: center; gap: 8px; }
 .project-card-entry .project-card { flex: 1; min-width: 0; margin: 0; }
+.project-card-grid .empty-projects { grid-column: 1 / -1; }
 .project-list-delete { flex: 0 0 auto; }
 .project-list-notice { margin: 18px 0 -10px; }
 .project-card:hover { border-color: #b5cbb7; box-shadow: 0 5px 18px #274b3210; }
@@ -187,10 +204,19 @@ h1 { max-width: 660px; margin: 0; font: 700 clamp(38px, 6vw, 62px)/1.08 'Segoe U
 .project-storage-badge { width: fit-content; max-width: 100%; overflow: hidden; padding: 4px 7px; border-radius: 6px; background: #f0f4ef; color: #52715a; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .empty-projects { padding: 18px; border: 1px dashed #d5dfd5; border-radius: 12px; color: #818b82; font-size: 13px; line-height: 1.6; }
 .project-create-form { display: grid; align-content: start; gap: 16px; padding: clamp(20px, 2vw, 28px); border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-surface); box-shadow: 0 8px 28px #233c2d08; }
-.project-side-actions { display: grid; align-content: start; gap: 16px; }
+.project-side-actions { width: min(760px, 100%); display: grid; align-content: start; gap: 16px; margin: 0 auto; }
+.project-form-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.project-form-heading h2 { margin: 0; }
+.panel-close-button { width: 32px; height: 32px; flex: 0 0 32px; border: 1px solid #e0e7df; border-radius: 9px; background: #fff; color: #647267; cursor: pointer; font-size: 20px; line-height: 1; }
+.panel-close-button:hover { background: #f2f6f1; color: #293a2e; }
 .project-import-form { gap: 12px; }
 .import-project-note { margin: -5px 0 0; color: #718076; font-size: 11px; line-height: 1.55; }
 .project-import-form input[type="file"] { padding: 8px; font-size: 11px; }
+.github-import-disclosure, .google-drive-import-disclosure { display: grid; gap: 11px; padding-top: 12px; border-top: 1px solid #e8ede8; }
+.github-import-disclosure > summary, .google-drive-import-disclosure > summary { color: #47634d; cursor: pointer; font-size: 11px; font-weight: 700; }
+.github-import-disclosure > p, .google-drive-import-disclosure > p { margin: 0; color: #78857b; font-size: 10px; line-height: 1.6; }
+.github-import-disclosure > button, .google-drive-import-disclosure > button { justify-self: start; }
+.plain-link-button { width: fit-content; padding: 3px 0; border: 0; background: transparent; color: #4c8059; cursor: pointer; font: 600 10px 'Segoe UI', sans-serif; text-decoration: underline; text-underline-offset: 2px; }
 .project-create-form .eyebrow { margin: 0 0 -10px; text-align: left; }
 .sample-project-start { display: grid; justify-items: start; gap: 8px; padding-top: 14px; border-top: 1px solid #e8ede8; }
 .sample-project-start p, .sample-project-start small { margin: 0; color: #68766b; font-size: 11px; line-height: 1.5; }
@@ -232,6 +258,7 @@ h1 { max-width: 660px; margin: 0; font: 700 clamp(38px, 6vw, 62px)/1.08 'Segoe U
 .workspace-section-nav span { overflow: hidden; color: #849087; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-section-nav .is-active span { color: #63816a; }
 .project-overview { display: grid; gap: 16px; margin-bottom: 20px; }
+.project-overview-content { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(0, .88fr); grid-template-areas: 'readme progress'; gap: 15px; align-items: start; }
 .project-overview-hero { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(230px, .42fr); gap: 24px; padding: clamp(20px, 2.6vw, 34px); border: 1px solid #dfe8df; border-radius: 18px; background: linear-gradient(125deg, #fff 0%, #f8fbf8 68%, #edf5ef 100%); box-shadow: 0 10px 30px #233c2d08; }
 .project-overview-intro { min-width: 0; display: flex; align-items: flex-start; gap: 16px; }
 .project-overview-mark { width: 48px; height: 48px; flex: 0 0 48px; display: grid; place-items: center; border-radius: 14px; background: #1f6242; color: #fff; font-size: 20px; font-weight: 750; box-shadow: 0 6px 14px #1f624226; }
@@ -246,18 +273,45 @@ h1 { max-width: 660px; margin: 0; font: 700 clamp(38px, 6vw, 62px)/1.08 'Segoe U
 .project-overview-live { display: inline-flex; align-items: center; gap: 7px; color: #457451; font-size: 10px; font-weight: 700; }
 .project-overview-live i { width: 7px; height: 7px; border-radius: 50%; background: #4c9a61; box-shadow: 0 0 0 3px #4c9a611b; }
 .project-overview-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 11px; }
-.project-overview-stats article { min-width: 0; display: grid; gap: 5px; padding: 16px 18px; border: 1px solid #e5eae4; border-radius: 13px; background: #fff; }
-.project-overview-stats article > span { color: #77847a; font-size: 10px; font-weight: 650; }
-.project-overview-stats article > strong { color: #2e4e37; font-size: 24px; line-height: 1.1; }
-.project-overview-stats article > small { overflow: hidden; color: #8a948b; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.project-overview-stats button { min-width: 0; display: grid; gap: 5px; padding: 16px 18px; border: 1px solid #e5eae4; border-radius: 13px; background: #fff; color: inherit; cursor: pointer; font: inherit; text-align: left; transition: border-color .15s, box-shadow .15s, transform .15s; }
+.project-overview-stats button:hover { transform: translateY(-1px); border-color: #b8cbb9; box-shadow: 0 6px 16px #274b320d; }
+.project-overview-stats button:focus-visible { outline: 3px solid #6d9a75; outline-offset: 2px; }
+.project-overview-stats button > span { color: #77847a; font-size: 10px; font-weight: 650; }
+.project-overview-stats button > strong { color: #2e4e37; font-size: 24px; line-height: 1.1; }
+.project-overview-stats button > small { overflow: hidden; color: #8a948b; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.project-overview-stats button > small b { margin-left: 4px; color: #568061; font-weight: 650; }
+.project-overview-progress { grid-area: progress; display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); gap: 10px; }
+.project-overview-progress-summary, .project-overview-deadlines { min-width: 0; padding: 17px 19px; border: 1px solid #e3e9e2; border-radius: 14px; background: #fff; }
+.project-overview-progress-summary { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px 16px; }
+.project-overview-progress-summary > div:first-child { display: grid; gap: 5px; }
+.project-overview-progress-summary .eyebrow, .project-overview-deadlines .eyebrow { margin: 0; color: #68816b; font-size: 9px; font-weight: 700; letter-spacing: .06em; }
+.project-overview-progress-summary > div:first-child strong { color: #334c39; font-size: 17px; }
+.project-overview-progress-summary > div:first-child span { color: #89938a; font-size: 10px; }
+.project-overview-progress-track { grid-column: 1 / -1; height: 8px; overflow: hidden; border-radius: 99px; background: #edf1ec; }
+.project-overview-progress-track span { height: 100%; display: block; border-radius: inherit; background: linear-gradient(90deg, #6b9c71, #3c7950); transition: width .2s ease; }
+.project-overview-progress-summary > button, .project-overview-deadlines .project-overview-panel-heading > button { padding: 6px 0; border: 0; background: transparent; color: #558060; cursor: pointer; font: 650 10px 'Segoe UI', sans-serif; white-space: nowrap; }
+.project-overview-progress-summary > button b { margin-left: 4px; }
+.project-overview-deadlines { padding-block: 12px; }
+.project-overview-deadlines .project-overview-panel-heading { margin-bottom: 5px; }
+.project-overview-deadlines .project-overview-panel-heading h3 { font-size: 14px; }
+.project-overview-deadlines ul { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.project-overview-deadlines li button { width: 100%; min-width: 0; display: grid; grid-template-columns: 43px minmax(0, 1fr) auto; align-items: center; gap: 9px; padding: 7px 3px; border: 0; border-top: 1px solid #f0f2ef; background: transparent; color: #49564b; cursor: pointer; text-align: left; }
+.project-overview-deadlines li button:hover strong { color: #34714a; text-decoration: underline; text-underline-offset: 2px; }
+.project-overview-deadlines li button > span { color: #75867a; font-size: 9px; }
+.project-overview-deadlines li button > span.is-overdue { color: #b64c42; font-weight: 700; }
+.project-overview-deadlines li button > strong { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.project-overview-deadlines li button > small { color: #879187; font-size: 9px; }
+.project-overview-deadlines .project-overview-empty { margin: 8px 0 0; font-size: 10px; }
+.project-overview-deadline-empty { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.project-overview-deadline-empty > button { flex: 0 0 auto; padding: 6px 0; border: 0; background: transparent; color: #558060; cursor: pointer; font: 650 9px 'Segoe UI', sans-serif; }
 .project-overview-lower { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(270px, .75fr); align-items: start; gap: 15px; }
 .project-overview-panel { min-width: 0; padding: 19px; border: 1px solid #e3e9e2; border-radius: 15px; background: #fff; box-shadow: 0 5px 18px #233c2d06; }
 .project-overview-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 11px; }
 .project-overview-panel-heading h3, .project-overview-start h3 { margin: 0; color: #334438; font-size: 16px; letter-spacing: -.02em; }
 .project-overview-panel-heading > button { padding: 6px 0; border: 0; background: none; color: #4c8059; cursor: pointer; font: 650 10px 'Segoe UI', sans-serif; white-space: nowrap; }
-.project-overview-readme { min-width: 0; padding: clamp(19px, 2.5vw, 30px); border: 1px solid #e3e9e2; border-radius: 15px; background: #fff; box-shadow: 0 5px 18px #233c2d06; }
+.project-overview-readme { min-width: 0; grid-area: readme; padding: clamp(19px, 2.5vw, 30px); border: 1px solid #e3e9e2; border-radius: 15px; background: #fff; box-shadow: 0 5px 18px #233c2d06; }
 .project-overview-readme .project-overview-panel-heading { padding-bottom: 12px; border-bottom: 1px solid #edf0ed; }
-.project-readme-body { max-width: 90ch; color: #445247; font-size: 13px; line-height: 1.8; overflow-wrap: anywhere; }
+.project-readme-body { width: 100%; max-width: 90ch; margin-inline: auto; color: #445247; font-size: 13px; line-height: 1.8; text-align: left; overflow-wrap: anywhere; }
 .project-readme-body > :first-child { margin-top: 0; }
 .project-readme-body > :last-child { margin-bottom: 0; }
 .project-readme-body h1, .project-readme-body h2, .project-readme-body h3, .project-readme-body h4 { margin: 22px 0 9px; color: #2f4033; line-height: 1.35; letter-spacing: -.025em; }
@@ -293,13 +347,30 @@ h1 { max-width: 660px; margin: 0; font: 700 clamp(38px, 6vw, 62px)/1.08 'Segoe U
 .project-overview-activity li > button:hover .project-overview-activity-copy > span { color: #287149; }
 .project-overview-empty { margin: 0; padding: 16px 0 3px; color: #7c887e; font-size: 11px; line-height: 1.7; }
 .project-overview-start h3 { margin-bottom: 10px; }
-.project-overview-start > button { width: 100%; min-width: 0; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 11px 2px; border: 0; border-top: 1px solid #edf0ed; background: transparent; color: inherit; cursor: pointer; text-align: left; }
+.project-setup-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.project-setup-details > summary { display: flex; cursor: pointer; list-style: none; }
+.project-setup-details > summary::-webkit-details-marker { display: none; }
+.project-setup-details > summary::after { content: '＋'; margin-left: auto; color: #68816b; font-size: 16px; }
+.project-setup-details[open] > summary::after { content: '−'; }
+.project-setup-heading .eyebrow { margin: 0 0 5px; color: #61816a; font-size: 9px; font-weight: 750; letter-spacing: .08em; }
+.project-setup-heading h3 { margin: 0; }
+.project-setup-heading > span { flex: 0 0 auto; padding: 6px 8px; border-radius: 20px; background: #edf4ed; color: #4c7955; font-size: 9px; font-weight: 700; }
+.project-setup-progress { height: 6px; overflow: hidden; margin: 12px 0 3px; border-radius: 99px; background: #edf1ec; }
+.project-setup-progress span { height: 100%; display: block; border-radius: inherit; background: #548761; transition: width .2s ease; }
+.project-overview-start .project-setup-list > button { padding-block: 9px; }
+.project-setup-list .project-setup-icon { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; background: #f1f4f0; color: #79877b; font-size: 13px; font-weight: 700; }
+.project-setup-list > button.is-complete .project-setup-icon { background: #eaf4eb; color: #3d8250; }
+.project-setup-copy { min-width: 0; display: grid; gap: 4px; }
+.project-setup-list > button > b { color: #7f9583; font-size: 9px; font-weight: 650; white-space: nowrap; }
+.project-setup-list > button.is-complete > b { color: #54815c; }
+.project-setup-list > button:disabled { cursor: not-allowed; opacity: .6; }
+.project-overview-start > button, .project-overview-start .project-setup-list > button { width: 100%; min-width: 0; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 11px 2px; border: 0; border-top: 1px solid #edf0ed; background: transparent; color: inherit; cursor: pointer; text-align: left; }
 .project-overview-action-icon { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 9px; background: #eef5ef; color: #477653; font-size: 15px; font-weight: 700; }
-.project-overview-start > button > span:nth-child(2) { min-width: 0; display: grid; gap: 4px; }
-.project-overview-start > button strong { color: #3b4a3e; font-size: 10px; }
-.project-overview-start > button small { color: #818b82; font-size: 9px; line-height: 1.45; }
-.project-overview-start > button > b { color: #7f9583; font-size: 14px; }
-.project-overview-start > button:hover strong, .project-overview-start > button:hover > b { color: #287149; }
+.project-overview-start > button > span:nth-child(2), .project-overview-start .project-setup-list > button .project-setup-copy { min-width: 0; display: grid; gap: 4px; }
+.project-overview-start > button strong, .project-overview-start .project-setup-list > button strong { color: #3b4a3e; font-size: 10px; }
+.project-overview-start > button small, .project-overview-start .project-setup-list > button small { color: #818b82; font-size: 9px; line-height: 1.45; }
+.project-overview-start > button > b, .project-overview-start .project-setup-list > button > b { color: #7f9583; font-size: 14px; }
+.project-overview-start > button:hover strong, .project-overview-start > button:hover > b, .project-overview-start .project-setup-list > button:hover strong, .project-overview-start .project-setup-list > button:hover > b { color: #287149; }
 .project-collaborators-card { display: grid; gap: 15px; margin: 0 0 18px; padding: 17px; border: 1px solid #dfe8df; border-radius: 13px; background: #fff; }
 .project-collaborators-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .project-collaborators-heading .eyebrow { margin: 0 0 5px; color: #64816a; font-size: 9px; font-weight: 700; letter-spacing: .08em; }
@@ -312,6 +383,38 @@ h1 { max-width: 660px; margin: 0; font: 700 clamp(38px, 6vw, 62px)/1.08 'Segoe U
 .project-member-form input:focus, .project-member-form select:focus { border-color: #518767; box-shadow: 0 0 0 3px #51876720; }
 .project-member-form > button { height: 36px; margin: 0; padding: 8px 12px; font-size: 11px; white-space: nowrap; }
 .project-member-form > small { grid-column: 1 / -1; color: #7a867c; font-size: 9px; line-height: 1.5; }
+.project-invite-tools { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px 12px; margin: 10px 0 18px; padding: 12px; border: 1px solid #e7ece6; border-radius: 10px; background: #fff; }
+.project-invite-tools > small { color: #718076; font-size: 10px; line-height: 1.5; }
+.project-invitation-list { display: grid; gap: 8px; padding: 13px; border: 1px solid #e7ece6; border-radius: 10px; background: #fbfcfa; }
+.project-invitation-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.project-invitation-heading h3 { margin: 0; color: #34463a; font-size: 12px; }
+.project-invitation-heading p { margin: 4px 0 0; color: #79857c; font-size: 10px; }
+.project-invitation-heading > span { flex: 0 0 auto; padding: 5px 8px; border-radius: 999px; background: #edf4ee; color: #3b6848; font-size: 10px; font-weight: 650; }
+.project-invitation-list ul { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.project-invitation-list li { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; gap: 12px; padding: 10px 2px; border-top: 1px solid #e9eee8; }
+.project-invitation-identity { min-width: 0; display: grid; gap: 4px; }
+.project-invitation-identity strong { overflow: hidden; color: #34463a; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.project-invitation-identity small, .project-invitation-list time { color: #79857c; font-size: 10px; }
+.project-invitation-list li.is-expired .project-invitation-identity strong, .project-invitation-list li.is-expired time { color: #8d716d; }
+.project-invitation-list .plain-danger-button { min-height: 30px; margin: 0; padding: 5px 9px; }
+.project-invitation-empty { margin: 0; padding: 10px 2px 2px; border-top: 1px solid #e9eee8; color: #79857c; font-size: 10px; }
+.project-team-activity { display: grid; gap: 8px; margin-top: 4px; padding: 13px; border: 1px solid #e7ece6; border-radius: 10px; background: #fbfcfa; }
+.project-team-activity-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.project-team-activity-heading h3 { margin: 0; color: #34463a; font-size: 12px; }
+.project-team-activity-heading p { margin: 4px 0 0; color: #79857c; font-size: 10px; }
+.project-team-activity-heading > span { flex: 0 0 auto; color: #79857c; font-size: 10px; }
+.project-team-activity ol { display: grid; margin: 0; padding: 0; list-style: none; }
+.project-team-activity li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 10px; padding: 9px 2px; border-top: 1px solid #e9eee8; }
+.project-team-activity li > span { color: #556459; font-size: 11px; line-height: 1.5; }
+.project-team-activity li strong { margin-right: 5px; color: #34463a; }
+.project-team-activity li time { flex: 0 0 auto; color: #929c93; font-size: 9px; white-space: nowrap; }
+.project-team-activity-empty { margin: 0; padding: 10px 2px 2px; border-top: 1px solid #e9eee8; color: #79857c; font-size: 10px; }
+.project-invite-link { display: flex; grid-column: 1 / -1; gap: 8px; }
+.project-invite-link input { flex: 1; min-width: 0; height: 36px; padding: 8px 10px; border: 1px solid #dce3dc; border-radius: 7px; color: #334238; font: 11px 'Segoe UI', sans-serif; }
+.project-invite-banner { display: flex; align-items: center; gap: 12px; max-width: 1180px; margin: 14px auto; padding: 14px 16px; border: 1px solid #bfd9c7; border-radius: 12px; background: #f1f8f2; }
+.project-invite-banner > div { display: grid; flex: 1; gap: 4px; color: #526458; font-size: 12px; }
+.project-invite-banner strong { color: #234d35; font-size: 14px; }
+.project-invite-banner button { flex: 0 0 auto; }
 .project-member-list { display: grid; }
 .project-member-row { min-width: 0; display: flex; align-items: center; gap: 10px; padding: 10px 2px; border-top: 1px solid #edf0ed; }
 .project-member-avatar { width: 29px; height: 29px; display: grid; flex: 0 0 29px; place-items: center; border-radius: 50%; background: #edf4ed; color: #477151; font-size: 11px; font-weight: 700; }
@@ -323,6 +426,8 @@ h1 { max-width: 660px; margin: 0; font: 700 clamp(38px, 6vw, 62px)/1.08 'Segoe U
 .project-member-role-owner { background: #e7f2e8; color: #34784c; }
 .project-member-role-editor { background: #edf2fb; color: #4c6591; }
 .project-member-role-viewer { background: #f3f0e9; color: #81704c; }
+.project-member-online { display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px; border-radius: 999px; background: #eef7ef; color: #367148; font-size: 9px; white-space: nowrap; }
+.project-member-online i { width: 6px; height: 6px; border-radius: 50%; background: #3c9a58; box-shadow: 0 0 0 2px #dcefe0; }
 .project-member-role-select { max-width: 112px; padding: 5px 7px; border: 1px solid transparent; border-radius: 6px; cursor: pointer; font: 600 9px 'Segoe UI', sans-serif; }
 .project-member-role-select:disabled { cursor: not-allowed; opacity: .6; }
 .member-readonly-note { margin: 0; padding: 9px 11px; border-radius: 8px; background: #f5f3ed; color: #746648; font-size: 10px; line-height: 1.6; }
@@ -458,6 +563,9 @@ h1 { max-width: 660px; margin: 0; font: 700 clamp(38px, 6vw, 62px)/1.08 'Segoe U
 .file-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-right: 5px; }
 .file-panel-heading .panel-label { margin-bottom: 11px; }
 .file-add-button { width: 25px; height: 25px; display: grid; place-items: center; margin: -4px 0 5px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: #65756a; cursor: pointer; font: 19px/1 'Segoe UI', sans-serif; }
+.file-drive-import-button { margin: -4px 0 5px auto; padding: 5px 7px; border: 1px solid #dce7dc; border-radius: 6px; background: #f6faf6; color: #3c6b48; cursor: pointer; font: 10px 'Segoe UI', sans-serif; white-space: nowrap; }
+.file-drive-import-button:hover { border-color: #b9d1be; background: #edf6ef; }
+.file-drive-import-button:disabled { cursor: wait; opacity: .5; }
 .file-add-button:hover { border-color: #d6e0d6; background: #edf3ec; color: #2c6540; }
 .file-add-button:disabled { cursor: wait; opacity: .5; }
 .panel-label { margin: 4px 8px 11px; color: #89938b; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
@@ -556,8 +664,31 @@ h1 { max-width: 660px; margin: 0; font: 700 clamp(38px, 6vw, 62px)/1.08 'Segoe U
 .connections-heading h1 { font-size: clamp(32px, 4vw, 44px); letter-spacing: -.04em; }
 .connections-heading > p:last-child { color: #718076; font-size: 14px; line-height: 1.7; }
 .connection-card { max-width: 1200px; margin-inline: auto; padding: clamp(20px, 3vw, 32px); border: 1px solid #e1e8e1; border-radius: 16px; background: #fff; box-shadow: 0 8px 28px #233c2d08; }
+.drive-connection-setup { margin: 14px 0; padding: 12px 14px; border: 1px solid #e6ece5; border-radius: 10px; background: #fafcf9; }
+.drive-connection-setup > summary { color: #49644f; cursor: pointer; font-size: 11px; font-weight: 700; }
+.drive-connection-setup > p, .drive-connection-setup > div > p { margin: 10px 0; color: #718076; font-size: 10px; line-height: 1.6; }
+.connection-scope-notice { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 0; padding: 12px 14px; border: 1px solid #e8e8d9; border-radius: 10px; background: #fdfcf6; }
+.connection-scope-notice p { margin: 0; color: #746d50; font-size: 10px; line-height: 1.6; }
 .connection-title { display: flex; align-items: center; gap: 14px; padding-bottom: 20px; border-bottom: 1px solid #edf0ed; }
 .google-mark { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid #e7ebe6; border-radius: 12px; color: #4285f4; font: 700 22px Arial, sans-serif; }
+.github-mark { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid #e7ebe6; border-radius: 12px; background: #f5f6f5; color: #202923; font: 700 13px Arial, sans-serif; }
+.github-connection-card { margin-bottom: 18px; }
+.github-token-steps { display: grid; gap: 7px; margin: 12px 0 16px; padding-left: 20px; color: #66756a; font-size: 12px; line-height: 1.65; }
+.github-token-field { display: grid; gap: 7px; max-width: 620px; margin: 14px 0; color: #405247; font-size: 12px; font-weight: 700; }
+.github-token-field input { width: 100%; padding: 11px 13px; border: 1px solid #dce5dc; border-radius: 9px; background: #fff; color: #26362b; font: 13px 'Segoe UI', sans-serif; }
+.github-token-field input:focus { border-color: #4a8a5a; outline: 3px solid #4a8a5a20; }
+.connection-footnote { margin: 11px 0 0; color: #78857b; font-size: 10px; line-height: 1.6; }
+.github-source-panel { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px 18px; margin: 18px 0; padding: 17px 19px; border: 1px solid #dfe8df; border-radius: 11px; background: #f8fbf8; }
+.github-source-panel .eyebrow { margin: 0 0 5px; }
+.github-source-panel h3 { margin: 0 0 5px; font-size: 15px; }
+.github-source-panel h3 a { color: #2d5537; text-decoration: none; }
+.github-source-panel h3 a:hover { text-decoration: underline; }
+.github-source-panel p { margin: 0; color: #718076; font-size: 11px; }
+.github-source-panel code { color: #394a3d; font-size: 10px; }
+.github-source-panel > small { grid-column: 1 / -1; color: #78857b; font-size: 10px; }
+.github-source-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.github-source-state { color: #5a6b5e; font-size: 11px; font-weight: 700; }
+.github-source-state.is-ahead { color: #97600c; }
 .connection-title h2 { margin: 0; color: #293a2e; font-size: 17px; }
 .connection-title p { margin: 4px 0 0; color: #859087; font-size: 11px; }
 .connection-badge { margin-left: auto; padding: 6px 10px; border-radius: 20px; background: #f2f3f1; color: #778178; font-size: 10px; font-weight: 700; }
@@ -598,6 +729,11 @@ h1 { max-width: 660px; margin: 0; font: 700 clamp(38px, 6vw, 62px)/1.08 'Segoe U
 .disconnect-button { margin-top: 18px; padding: 9px 12px; border: 1px solid #e5d4d0; border-radius: 8px; background: white; color: #9a4941; cursor: pointer; font: 600 11px 'Segoe UI', sans-serif; }
 .disconnect-button:disabled { opacity: .5; cursor: wait; }
 @media (max-width: 760px) {
+  .project-heading-row { align-items: flex-start; flex-direction: column; }
+  .project-list-actions { width: 100%; }
+  .project-list-actions > button { flex: 1; }
+  .project-storage-disclosure > summary { align-items: flex-start; flex-wrap: wrap; }
+  .project-storage-disclosure > summary small { flex-basis: 100%; }
   .learning-topbar { height: 62px; gap: 12px; padding: 0 14px; }
   .topbar-brand > span, .account-menu > span { display: none; }
   .topbar-nav { flex: 1; justify-content: center; }
@@ -607,8 +743,12 @@ h1 { max-width: 660px; margin: 0; font: 700 clamp(38px, 6vw, 62px)/1.08 'Segoe U
   .project-list-layout { grid-template-columns: 1fr; gap: 24px; margin-top: 27px; }
   .storage-provider-grid { grid-template-columns: 1fr; }
   .project-storage-hub { padding: 17px; }
-  .project-cards-heading { align-items: flex-start; flex-direction: column; }
+  .project-cards-heading { align-items: stretch; flex-direction: column; }
+  .project-list-controls { justify-content: flex-start; }
   .project-search, .project-search input { width: 100%; }
+  .project-search { flex: 1 1 100%; }
+  .project-select-label { flex: 1 1 0; min-width: 0; }
+  .project-select-label select { width: 100%; }
   .workspace-heading { align-items: flex-start; flex-direction: column; }
   .workspace-title-row { align-items: flex-start; }
   .workspace-heading h1 { margin-top: 13px; }
@@ -618,12 +758,17 @@ h1 { max-width: 660px; margin: 0; font: 700 clamp(38px, 6vw, 62px)/1.08 'Segoe U
   .workspace-section-nav { display: flex; overflow-x: auto; margin-block: 14px 17px; scrollbar-width: thin; }
   .workspace-section-nav button { min-width: 132px; flex: 1 0 132px; padding: 10px 11px; }
   .project-overview-hero { grid-template-columns: 1fr; gap: 17px; }
+  .project-overview-content { grid-template-columns: minmax(0, 1fr); grid-template-areas: "readme" "progress"; }
+  .project-overview-progress { grid-template-columns: 1fr; }
   .project-overview-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: center; }
   .project-overview-lower { grid-template-columns: 1fr; }
   .project-overview-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .project-overview-intro { flex-wrap: wrap; }
   .project-overview-edit { margin-left: 64px; }
   .project-member-form { grid-template-columns: 1fr; }
+  .project-invite-tools { grid-template-columns: 1fr; }
+  .project-invite-link { flex-direction: column; }
+  .project-invite-banner { align-items: stretch; flex-direction: column; margin: 10px 14px; }
   .project-task-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .task-board-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .task-search-field { grid-column: span 2; }
@@ -692,6 +837,7 @@ h1 { max-width: 660px; margin: 0; font: 700 clamp(38px, 6vw, 62px)/1.08 'Segoe U
 @media (min-width: 761px) and (max-width: 1100px) {
   .learning-main { grid-template-columns: minmax(228px, 258px) minmax(0, 1fr); gap: 28px; }
   .workspace-grid { grid-template-columns: 235px minmax(0, 1fr); }
+  .project-overview-content { grid-template-columns: minmax(0, 1fr); grid-template-areas: "readme" "progress"; }
   .task-board-filters { grid-template-columns: minmax(150px, 1.3fr) repeat(3, minmax(112px, 1fr)); }
   .task-filter-count, .task-filter-reset { justify-self: start; }
 }
@@ -722,7 +868,17 @@ h1 { max-width: 660px; margin: 0; font: 700 clamp(38px, 6vw, 62px)/1.08 'Segoe U
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
 
-/* Public WebLink landing page */
+/* Restore the original app-page widths; keep the public homepage separate. */
+.learning-main { width: min(1120px, 100%); grid-template-columns: 260px minmax(0, 1fr); gap: clamp(28px, 6vw, 76px); padding: 56px 28px 90px; }
+.project-list-main, .workspace-main { width: min(1120px, 100%); padding: 56px 28px 90px; }
+.connections-main { width: min(880px, 100%); padding: 56px 28px 90px; }
+@media (max-width: 760px) {
+  .project-list-main, .workspace-main { padding: 32px 18px 60px; }
+  .connections-main { padding: 32px 18px 60px; }
+  .learning-main { grid-template-columns: 1fr; gap: 27px; padding: 28px 19px 60px; }
+}
+
+/* Friend's WebLink landing page */
 html:has(.landing-page) { scroll-behavior: smooth; scroll-snap-type: y mandatory; }
 .landing-page { --landing-ink: #17291f; --landing-green: #22583e; --landing-muted: #727e75; --landing-line: #dce4dc; color: var(--landing-ink); background: #f7f8f5; }
 .landing-header { position: fixed; z-index: 50; inset: 0 0 auto; height: 74px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 clamp(22px, 6vw, 92px); border-bottom: 1px solid #dce4dcaa; background: #f7f8f5eF; backdrop-filter: blur(16px); }

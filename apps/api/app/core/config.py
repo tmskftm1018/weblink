@@ -16,7 +16,17 @@ class Settings(BaseSettings):
     google_oauth_client_id: str | None = None
     google_oauth_client_secret: str | None = None
     google_oauth_redirect_uri: str = "http://localhost:8000/api/v1/connections/google/oauth/callback"
+    google_picker_api_key: str | None = None
+    google_cloud_project_number: str | None = None
     connection_encryption_key: str | None = None
+    invite_web_base_url: str = "http://localhost:5173"
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from_email: str | None = None
+    smtp_use_ssl: bool = False
+    smtp_starttls: bool = True
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

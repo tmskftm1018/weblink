@@ -7,6 +7,31 @@ class GoogleConnectionStatus(BaseModel):
     account_email: str | None = None
     scopes: list[str] = Field(default_factory=list)
     connected_at: str | None = None
+    drive_picker_configured: bool = False
+
+
+class GoogleDrivePickerConfig(BaseModel):
+    access_token: str
+    api_key: str
+    app_id: str
+
+
+class GoogleDriveFileResponse(BaseModel):
+    file_name: str
+    file_path: str
+    content: str
+    mime_type: str
+
+
+class GitHubConnectionStatus(BaseModel):
+    configured: bool
+    connected: bool
+    account_name: str | None = None
+    connected_at: str | None = None
+
+
+class GitHubTokenRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=500)
 
 
 class OAuthStartResponse(BaseModel):

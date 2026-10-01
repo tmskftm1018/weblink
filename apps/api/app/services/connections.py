@@ -6,6 +6,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import UTC, datetime, timedelta
+from pathlib import PurePosixPath
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -21,12 +22,16 @@ from app.security.connection_tokens import (
     encrypt_token,
 )
 
-GOOGLE_SCOPES = ["openid", "email", "https://www.googleapis.com/auth/spreadsheets.readonly"]
 GOOGLE_AUTHORIZATION_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_ENDPOINT = "https://openidconnect.googleapis.com/v1/userinfo"
 GOOGLE_SHEETS_ENDPOINT = "https://sheets.googleapis.com/v4/spreadsheets"
+GOOGLE_DRIVE_ENDPOINT = "https://www.googleapis.com/drive/v3/files"
+GOOGLE_DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file"
+GOOGLE_SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
+GOOGLE_SCOPES = ["openid", "email", GOOGLE_SHEETS_SCOPE, GOOGLE_DRIVE_FILE_SCOPE]
 _SPREADSHEET_ID = re.compile(r"^[A-Za-z0-9_-]{10,200}$")
+_DRIVE_FILE_ID = re.compile(r"^[A-Za-z0-9_-]{10,200}$")
 _SHEET_RANGE = re.compile(r"^[\w.'!:$ -]{1,128}$")
 
 
@@ -35,6 +40,14 @@ class ConnectionsNotConfigured(Exception):
 
 
 class GoogleConnectionNotFound(Exception):
+    pass
+
+
+class GoogleDriveScopeRequired(Exception):
+    pass
+
+
+class GoogleDriveFileUnsupported(Exception):
     pass
 
 
@@ -89,6 +102,7 @@ def status(db: Session, user: User) -> GoogleConnectionStatus:
         account_email=connection.account_email if connection else None,
         scopes=connection.scopes if connection else [],
         connected_at=connection.connected_at.isoformat() if connection else None,
+        drive_picker_configured=bool(settings.google_picker_api_key and settings.google_cloud_project_number),
     )
 
 
@@ -224,7 +238,7 @@ def complete_google_authorization(
         raise GoogleRequestFailed
     scopes = tokens.get("scope", " ".join(GOOGLE_SCOPES))
     scopes = scopes.split() if isinstance(scopes, str) else []
-    required_scope = "https://www.googleapis.com/auth/spreadsheets.readonly"
+    required_scope = GOOGLE_SHEETS_SCOPE
     if required_scope not in scopes:
         db.rollback()
         raise GoogleRequestFailed(403)
@@ -257,6 +271,105 @@ def disconnect_google(db: Session, user: User) -> None:
     if connection:
         db.delete(connection)
         db.commit()
+
+
+def drive_picker_config(db: Session, user: User) -> dict[str, str]:
+    if not settings.google_picker_api_key or not settings.google_cloud_project_number:
+        raise ConnectionsNotConfigured
+    connection = db.scalar(select(GoogleConnection).where(GoogleConnection.user_id == user.id))
+    if connection is None:
+        raise GoogleConnectionNotFound
+    if GOOGLE_DRIVE_FILE_SCOPE not in connection.scopes:
+        raise GoogleDriveScopeRequired
+    try:
+        refresh_token = decrypt_token(connection.refresh_token_ciphertext)
+    except ConnectionEncryptionUnavailable as exc:
+        raise ConnectionsNotConfigured from exc
+    return {
+        "access_token": _access_token(refresh_token),
+        "api_key": settings.google_picker_api_key,
+        "app_id": settings.google_cloud_project_number,
+    }
+
+
+def _drive_get_bytes(url: str, access_token: str, *, max_bytes: int = 200_000) -> bytes:
+    request = urllib.request.Request(
+        url,
+        headers={"Authorization": f"Bearer {access_token}", "Accept": "*/*"},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=12) as response:
+            body = response.read(max_bytes + 1)
+    except urllib.error.HTTPError as exc:
+        try:
+            error_body = exc.read(32_768)
+        except OSError:
+            error_body = b""
+        message = (
+            "Google Drive API가 활성화되어 있지 않아요. Google Cloud에서 Drive API를 사용 설정해 주세요."
+            if exc.code == 403 and any(marker in error_body.lower() for marker in (b"accessnotconfigured", b"service_disabled", b"not enabled"))
+            else "Google Drive 파일을 읽을 권한이 없거나 파일이 삭제되었습니다. Picker에서 파일을 다시 선택해 주세요."
+            if exc.code in (403, 404)
+            else "Google 계정 연결이 만료되었어요. 계정을 다시 연결해 주세요."
+            if exc.code == 401
+            else "Google Drive 요청 한도에 도달했어요. 잠시 뒤 다시 시도해 주세요."
+            if exc.code == 429
+            else "Google Drive 파일을 불러오지 못했습니다."
+        )
+        raise GoogleRequestFailed(413 if exc.code == 413 else (401 if exc.code == 401 else 422 if exc.code in (403, 404) else 502), message) from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise GoogleRequestFailed(502, "Google Drive에 연결하지 못했습니다. 잠시 뒤 다시 시도해 주세요.") from exc
+    if len(body) > max_bytes:
+        raise GoogleRequestFailed(413, "가져올 파일은 200KB 이하여야 합니다.")
+    return body
+
+
+def import_google_drive_file(db: Session, user: User, file_id: str):
+    if not _DRIVE_FILE_ID.fullmatch(file_id):
+        raise GoogleDriveFileUnsupported
+    connection = db.scalar(select(GoogleConnection).where(GoogleConnection.user_id == user.id))
+    if connection is None:
+        raise GoogleConnectionNotFound
+    if GOOGLE_DRIVE_FILE_SCOPE not in connection.scopes:
+        raise GoogleDriveScopeRequired
+    try:
+        refresh_token = decrypt_token(connection.refresh_token_ciphertext)
+    except ConnectionEncryptionUnavailable as exc:
+        raise ConnectionsNotConfigured from exc
+    access_token = _access_token(refresh_token)
+    quoted_id = urllib.parse.quote(file_id, safe="")
+    metadata_url = f"{GOOGLE_DRIVE_ENDPOINT}/{quoted_id}?fields=id,name,mimeType,size"
+    metadata = _get_json(metadata_url, access_token)
+    name = metadata.get("name")
+    mime_type = metadata.get("mimeType")
+    if not isinstance(name, str) or not isinstance(mime_type, str):
+        raise GoogleDriveFileUnsupported
+    export_mime: str | None = None
+    output_mime = mime_type
+    if mime_type == "application/vnd.google-apps.document":
+        export_mime, output_mime = "text/plain", "text/plain"
+    elif mime_type == "application/vnd.google-apps.spreadsheet":
+        export_mime, output_mime = "text/csv", "text/csv"
+    elif mime_type not in {"text/plain", "text/markdown", "text/csv", "text/html", "text/css", "application/json", "application/xml", "text/xml", "application/javascript"}:
+        raise GoogleDriveFileUnsupported
+    if export_mime:
+        download_url = f"{GOOGLE_DRIVE_ENDPOINT}/{quoted_id}/export?mimeType={urllib.parse.quote(export_mime)}"
+    else:
+        download_url = f"{GOOGLE_DRIVE_ENDPOINT}/{quoted_id}?alt=media"
+    content_bytes = _drive_get_bytes(download_url, access_token)
+    try:
+        content = content_bytes.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise GoogleDriveFileUnsupported from exc
+    if len(content) > 200_000:
+        raise GoogleRequestFailed(413, "가져올 파일은 200,000자 이하여야 합니다.")
+    safe_name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name).strip(" .")[:180] or "drive-file"
+    if export_mime == "text/csv" and not safe_name.lower().endswith(".csv"):
+        safe_name += ".csv"
+    elif export_mime == "text/plain" and not PurePosixPath(safe_name).suffix:
+        safe_name += ".txt"
+    return {"file_name": name, "file_path": safe_name, "content": content, "mime_type": output_mime}
 
 
 def _access_token(refresh_token: str) -> str:

@@ -20,6 +20,7 @@ from app.schemas.tasks import (
     ProjectTaskActivityResponse,
 )
 from app.services import tasks as task_service
+from app.services.project_events import notify_project_change
 
 router = APIRouter(prefix="/projects/{project_id}/tasks", tags=["project tasks"])
 SessionDep = Annotated[Session, Depends(get_db)]
@@ -52,7 +53,9 @@ def create_task(
     user: CurrentUser,
 ) -> ProjectTaskResponse:
     try:
-        return task_service.create_task(db, user, project_id, payload)
+        created = task_service.create_task(db, user, project_id, payload)
+        notify_project_change(project_id, "tasks")
+        return created
     except task_service.ProjectNotFound as exc:
         raise HTTPException(status_code=404, detail="프로젝트를 찾지 못했습니다.") from exc
     except task_service.ProjectReadOnly as exc:
@@ -72,7 +75,9 @@ def update_task(
     user: CurrentUser,
 ) -> ProjectTaskResponse:
     try:
-        return task_service.update_task(db, user, project_id, task_id, payload)
+        updated = task_service.update_task(db, user, project_id, task_id, payload)
+        notify_project_change(project_id, "tasks")
+        return updated
     except task_service.ProjectNotFound as exc:
         raise HTTPException(status_code=404, detail="프로젝트를 찾지 못했습니다.") from exc
     except task_service.ProjectReadOnly as exc:
@@ -87,6 +92,7 @@ def update_task(
 def delete_task(project_id: UUID, task_id: UUID, db: SessionDep, user: CurrentUser) -> Response:
     try:
         task_service.delete_task(db, user, project_id, task_id)
+        notify_project_change(project_id, "tasks")
     except task_service.ProjectNotFound as exc:
         raise HTTPException(status_code=404, detail="프로젝트를 찾지 못했습니다.") from exc
     except task_service.ProjectReadOnly as exc:
@@ -117,7 +123,9 @@ def add_task_comment(
     user: CurrentUser,
 ) -> TaskCommentResponse:
     try:
-        return task_service.add_comment(db, user, project_id, task_id, payload)
+        comment = task_service.add_comment(db, user, project_id, task_id, payload)
+        notify_project_change(project_id, "tasks")
+        return comment
     except task_service.ProjectNotFound as exc:
         raise HTTPException(status_code=404, detail="프로젝트를 찾지 못했습니다.") from exc
     except task_service.ProjectReadOnly as exc:
@@ -147,7 +155,9 @@ def add_task_checklist_item(
     user: CurrentUser,
 ) -> TaskChecklistItemResponse:
     try:
-        return task_service.add_checklist_item(db, user, project_id, task_id, payload)
+        item = task_service.add_checklist_item(db, user, project_id, task_id, payload)
+        notify_project_change(project_id, "tasks")
+        return item
     except task_service.ProjectNotFound as exc:
         raise HTTPException(status_code=404, detail="프로젝트를 찾지 못했습니다.") from exc
     except task_service.ProjectReadOnly as exc:
@@ -168,7 +178,9 @@ def update_task_checklist_item(
     user: CurrentUser,
 ) -> TaskChecklistItemResponse:
     try:
-        return task_service.update_checklist_item(db, user, project_id, task_id, item_id, payload)
+        item = task_service.update_checklist_item(db, user, project_id, task_id, item_id, payload)
+        notify_project_change(project_id, "tasks")
+        return item
     except task_service.ProjectNotFound as exc:
         raise HTTPException(status_code=404, detail="프로젝트를 찾지 못했습니다.") from exc
     except task_service.ProjectReadOnly as exc:
@@ -185,6 +197,7 @@ def delete_task_checklist_item(
 ) -> Response:
     try:
         task_service.delete_checklist_item(db, user, project_id, task_id, item_id)
+        notify_project_change(project_id, "tasks")
     except task_service.ProjectNotFound as exc:
         raise HTTPException(status_code=404, detail="프로젝트를 찾지 못했습니다.") from exc
     except task_service.ProjectReadOnly as exc:

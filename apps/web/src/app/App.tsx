@@ -1,10 +1,11 @@
 import { FormEvent, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { authService, User } from '../services/auth'
 import { AttemptResult, Course, Lesson, learningService } from '../services/learning'
-import { connectionService, GoogleConnectionStatus, GoogleSheetValues } from '../services/connections'
-import { ProjectMember, ProjectSummary, ProjectTask, ProjectTaskActivity, ProjectTaskChecklistItem, ProjectTaskPriority, ProjectTaskStatus, ProjectVersion, ProjectVersionDetails, ProjectWorkspace, TaskDiscussion, projectService } from '../services/projects'
+import { connectionService, GitHubConnectionStatus, GoogleConnectionStatus, GoogleSheetValues } from '../services/connections'
+import { ManagedProjectInvitation, ProjectGitHubSource, ProjectMember, ProjectSummary, ProjectTask, ProjectTaskActivity, TaskChecklistItem, ProjectTaskPriority, ProjectTaskStatus, ProjectTeamActivity, ProjectVersion, ProjectVersionDetails, ProjectWorkspace, TaskDiscussion, projectService } from '../services/projects'
 import { bindProjectDirectory, chooseProjectDirectory, getProjectDirectory, moveProjectFileInDirectory, moveProjectFilesInDirectory, ProjectDirectory, readProjectDirectory, removeEmptyProjectDirectoryFromDirectory, removeProjectFileFromDirectory, unbindProjectDirectory, writeProjectDirectory } from '../services/localProjects'
 import { readDroppedProjectItems } from '../services/projectDropImport'
+import { pickGoogleDriveFiles } from '../services/googleDrivePicker'
 import ProjectFileTree, { buildProjectFileTree } from './ProjectFileTree'
 import ProjectReadmePreview from './ProjectReadmePreview'
 import LandingPage from './LandingPage'
@@ -13,6 +14,7 @@ type Mode = 'login' | 'signup'
 type View = 'lesson' | 'projects' | 'workspace' | 'connections'
 type ProjectWorkspaceSection = 'overview' | 'code' | 'tasks' | 'team' | 'storage'
 type NewProjectEntryKind = 'auto' | 'file' | 'folder'
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 const taskColumns: Array<{ status: ProjectTaskStatus; label: string }> = [
   { status: 'TODO', label: '할 일' },
   { status: 'IN_PROGRESS', label: '진행 중' },
@@ -100,6 +102,8 @@ export default function App() {
   const [assembledBlocks, setAssembledBlocks] = useState<string[]>([])
   const [view, setView] = useState<View>('lesson')
   const [googleConnection, setGoogleConnection] = useState<GoogleConnectionStatus | null>(null)
+  const [githubConnection, setGithubConnection] = useState<GitHubConnectionStatus | null>(null)
+  const [githubToken, setGithubToken] = useState('')
   const [connectionsBusy, setConnectionsBusy] = useState(false)
   const [connectionsError, setConnectionsError] = useState('')
   const [spreadsheetId, setSpreadsheetId] = useState('')
@@ -107,9 +111,18 @@ export default function App() {
   const [sheetPreview, setSheetPreview] = useState<GoogleSheetValues | null>(null)
   const [projects, setProjects] = useState<ProjectSummary[]>([])
   const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([])
+  const [projectTeamActivity, setProjectTeamActivity] = useState<ProjectTeamActivity[]>([])
+  const [onlineProjectMemberIds, setOnlineProjectMemberIds] = useState<string[]>([])
+  const [projectEventsConnected, setProjectEventsConnected] = useState(false)
+  const [projectInvitations, setProjectInvitations] = useState<ManagedProjectInvitation[]>([])
   const [projectTasks, setProjectTasks] = useState<ProjectTask[]>([])
   const [memberEmail, setMemberEmail] = useState('')
   const [memberRole, setMemberRole] = useState<'EDITOR' | 'VIEWER'>('EDITOR')
+  const [projectInviteToken, setProjectInviteToken] = useState(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get('project_invite')
+    return fromUrl || window.sessionStorage.getItem('weblink.project-invite') || ''
+  })
+  const [projectInviteLink, setProjectInviteLink] = useState('')
   const [editingProjectDetails, setEditingProjectDetails] = useState(false)
   const [projectNameDraft, setProjectNameDraft] = useState('')
   const [projectDescriptionDraft, setProjectDescriptionDraft] = useState('')
@@ -125,7 +138,7 @@ export default function App() {
   const [editingTaskDueDate, setEditingTaskDueDate] = useState('')
   const [openTaskDiscussionId, setOpenTaskDiscussionId] = useState<string | null>(null)
   const [taskDiscussions, setTaskDiscussions] = useState<Record<string, TaskDiscussion>>({})
-  const [taskChecklists, setTaskChecklists] = useState<Record<string, ProjectTaskChecklistItem[]>>({})
+  const [taskChecklists, setTaskChecklists] = useState<Record<string, TaskChecklistItem[]>>({})
   const [taskCommentDrafts, setTaskCommentDrafts] = useState<Record<string, string>>({})
   const [taskCommentBusy, setTaskCommentBusy] = useState(false)
   const [taskChecklistDrafts, setTaskChecklistDrafts] = useState<Record<string, string>>({})
@@ -138,10 +151,16 @@ export default function App() {
   const [taskPriorityFilter, setTaskPriorityFilter] = useState<'ALL' | ProjectTaskPriority>('ALL')
   const [taskDeadlineFilter, setTaskDeadlineFilter] = useState<'ALL' | 'OVERDUE' | 'TODAY' | 'WEEK' | 'NO_DATE'>('ALL')
   const [projectSearch, setProjectSearch] = useState('')
+  const [projectRoleFilter, setProjectRoleFilter] = useState<'ALL' | 'OWNER' | 'MEMBER'>('ALL')
+  const [projectSort, setProjectSort] = useState<'UPDATED' | 'NAME'>('UPDATED')
   const [projectFolders, setProjectFolders] = useState<Record<string, string>>({})
   const [archiveToImport, setArchiveToImport] = useState<File | null>(null)
   const [archiveProjectName, setArchiveProjectName] = useState('')
+  const [githubRepositoryUrl, setGithubRepositoryUrl] = useState('')
+  const [githubProjectName, setGithubProjectName] = useState('')
+  const [projectListPanel, setProjectListPanel] = useState<'create' | 'import' | null>(null)
   const [workspace, setWorkspace] = useState<ProjectWorkspace | null>(null)
+  const [githubSource, setGithubSource] = useState<ProjectGitHubSource | null>(null)
   const [workspaceSection, setWorkspaceSection] = useState<ProjectWorkspaceSection>('overview')
   const [localProjectDirectory, setLocalProjectDirectory] = useState<ProjectDirectory | null>(null)
   const [pendingProjectDirectory, setPendingProjectDirectory] = useState<ProjectDirectory | null>(null)
@@ -169,13 +188,19 @@ export default function App() {
   const workspaceRef = useRef(workspace)
   const projectDirtyRef = useRef(projectDirty)
   const projectBusyRef = useRef(projectBusy)
+  const autoSaveAttemptRef = useRef('')
   workspaceRef.current = workspace
   projectDirtyRef.current = projectDirty
   projectBusyRef.current = projectBusy
   const filteredProjects = useMemo(() => {
     const query = projectSearch.trim().toLocaleLowerCase()
-    return projects.filter((project) => `${project.name} ${project.description}`.toLocaleLowerCase().includes(query))
-  }, [projects, projectSearch])
+    return projects
+      .filter((project) => (projectRoleFilter === 'ALL' || (projectRoleFilter === 'OWNER' ? project.role === 'OWNER' : project.role !== 'OWNER'))
+        && `${project.name} ${project.description}`.toLocaleLowerCase().includes(query))
+      .sort((left, right) => projectSort === 'NAME'
+        ? left.name.localeCompare(right.name, 'ko')
+        : new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime())
+  }, [projects, projectSearch, projectRoleFilter, projectSort])
   const projectFileTree = useMemo(() => buildProjectFileTree(workspace?.files ?? []), [workspace?.files])
   const projectReadmeFile = workspace?.files.find((file) => file.path.toLocaleLowerCase() === 'readme.md')
   const currentProjectRole = projectMembers.find((member) => member.user_id === user?.id)?.role ?? 'VIEWER'
@@ -221,24 +246,46 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    if (projectInviteToken) window.sessionStorage.setItem('weblink.project-invite', projectInviteToken)
+  }, [projectInviteToken])
+
+  useEffect(() => {
+    if (view !== 'workspace' || !workspace || workspace.role !== 'OWNER') {
+      setProjectInvitations([])
+      return
+    }
+    let cancelled = false
+    projectService.listInvitations(workspace.id)
+      .then((invitations) => { if (!cancelled) setProjectInvitations(invitations) })
+      .catch(() => { if (!cancelled) setProjectInvitations([]) })
+    return () => { cancelled = true }
+  }, [view, workspace?.id, workspace?.role])
+
+  useEffect(() => {
     const projectId = workspace?.id
-    if (view !== 'workspace' || !projectId || projectBusy) return
+    if (view !== 'workspace' || !projectId) return
     let cancelled = false
     let checking = false
+    let refreshRequested = false
     async function checkForCollaboratorChanges() {
-      if (checking || document.visibilityState === 'hidden') return
+      if (checking) { refreshRequested = true; return }
+      if (document.visibilityState === 'hidden') return
       const startingWorkspace = workspaceRef.current
       if (!startingWorkspace || startingWorkspace.id !== projectId) return
       checking = true
       try {
-        const [latest, latestMembers, latestTasks] = await Promise.all([
+        const [latest, latestMembers, latestTasks, latestTeamActivity, latestInvitations] = await Promise.all([
           projectService.get(projectId),
           projectService.listMembers(projectId),
           projectService.listTasks(projectId),
+          projectService.listTeamActivity(projectId),
+          startingWorkspace.role === 'OWNER' ? projectService.listInvitations(projectId) : Promise.resolve(null),
         ])
         if (cancelled) return
         setProjectMembers(latestMembers)
         setProjectTasks(latestTasks)
+        setProjectTeamActivity(latestTeamActivity)
+        if (latestInvitations) setProjectInvitations(latestInvitations)
         if (projectAccessLost) {
           setProjectAccessLost(false)
           setProjectError('')
@@ -299,22 +346,85 @@ export default function App() {
           && (cause.message.includes('Project not found') || cause.message.includes('프로젝트를 찾지 못했습니다'))) {
           setProjectAccessLost(true)
           setProjectMembers([])
+          setProjectTeamActivity([])
           setProjectError('이 프로젝트의 접근 권한이 해제됐거나 프로젝트가 삭제되어 서버와 동기화할 수 없습니다. 저장되지 않은 코드가 있다면 화면을 떠나기 전에 복사해 두세요.')
         }
         // Temporary connection failures do not interrupt editing; the next interval or focus retries.
       } finally {
         checking = false
+        if (refreshRequested && !cancelled && (document.visibilityState as string) !== 'hidden') {
+          refreshRequested = false
+          window.setTimeout(() => void checkForCollaboratorChanges(), 0)
+        }
       }
     }
     void checkForCollaboratorChanges()
     const interval = window.setInterval(() => void checkForCollaboratorChanges(), 10_000)
     window.addEventListener('focus', checkForCollaboratorChanges)
+    let socket: WebSocket | null = null
+    let reconnectTimer = 0
+    let pingTimer = 0
+    const connectToProjectEvents = () => {
+      if (cancelled) return
+      const socketUrl = `${apiBaseUrl.replace(/\/+$/, '').replace(/^http/, 'ws')}/api/v1/projects/${projectId}/events`
+      socket = new WebSocket(socketUrl)
+      socket.onopen = () => {
+        setProjectEventsConnected(true)
+        window.clearTimeout(reconnectTimer)
+        pingTimer = window.setInterval(() => {
+          if (socket?.readyState === WebSocket.OPEN) socket.send('ping')
+        }, 25_000)
+      }
+      socket.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(String(event.data)) as { type?: string; area?: string }
+          if (payload.type === 'project.presence' && Array.isArray((payload as { user_ids?: unknown }).user_ids)) {
+            setOnlineProjectMemberIds((payload as { user_ids: string[] }).user_ids.filter((id) => typeof id === 'string'))
+          } else if (payload.type === 'project.changed') {
+            void checkForCollaboratorChanges()
+            void projectService.listTaskActivity(projectId).then(setProjectTaskActivity).catch(() => undefined)
+            if (payload.area === 'github') {
+              void projectService.githubSource(projectId)
+                .then((source) => { if (workspaceRef.current?.id === projectId) setGithubSource(source) })
+                .catch(() => undefined)
+            }
+          }
+        } catch {
+          // Ignore malformed or future event types; periodic refresh remains the fallback.
+        }
+      }
+      socket.onclose = () => {
+        setProjectEventsConnected(false)
+        setOnlineProjectMemberIds([])
+        window.clearInterval(pingTimer)
+        if (!cancelled) reconnectTimer = window.setTimeout(connectToProjectEvents, 5_000)
+      }
+      socket.onerror = () => socket?.close()
+    }
+    connectToProjectEvents()
     return () => {
       cancelled = true
       window.clearInterval(interval)
+      window.clearInterval(pingTimer)
+      window.clearTimeout(reconnectTimer)
+      socket?.close()
       window.removeEventListener('focus', checkForCollaboratorChanges)
     }
-  }, [view, workspace?.id, workspace?.draft_version, projectBusy, projectAccessLost])
+  }, [view, workspace?.id, workspace?.draft_version, projectAccessLost])
+
+  const autoSaveSignature = useMemo(() => workspace
+    ? JSON.stringify([workspace.id, workspace.draft_version, workspace.files.map((file) => [file.path, file.content])])
+    : '', [workspace])
+
+  useEffect(() => {
+    if (view !== 'workspace' || !workspace || !projectDirty || projectBusy || projectNeedsReload || isProjectReadOnly) return
+    if (autoSaveAttemptRef.current === autoSaveSignature) return
+    const timer = window.setTimeout(() => {
+      autoSaveAttemptRef.current = autoSaveSignature
+      void saveProjectDraft()
+    }, 1_500)
+    return () => window.clearTimeout(timer)
+  }, [view, workspace, projectDirty, projectBusy, projectNeedsReload, isProjectReadOnly, autoSaveSignature, saveProjectDraft])
 
   useEffect(() => {
     const projectId = workspace?.id
@@ -504,6 +614,10 @@ export default function App() {
     setAssembledBlocks([])
     setProjects([])
     setProjectMembers([])
+    setOnlineProjectMemberIds([])
+    setProjectEventsConnected(false)
+    setProjectTeamActivity([])
+    setGithubSource(null)
     setProjectTasks([])
     setProjectAccessLost(false)
     setWorkspace(null)
@@ -534,6 +648,9 @@ export default function App() {
     setView('projects')
     setWorkspace(null)
     setProjectMembers([])
+    setOnlineProjectMemberIds([])
+    setProjectEventsConnected(false)
+    setProjectTeamActivity([])
     setProjectTasks([])
     setProjectAccessLost(false)
     setEditingProjectDetails(false)
@@ -566,10 +683,38 @@ export default function App() {
     setView('connections')
     setConnectionsError('')
     setConnectionsBusy(true)
+    const [googleResult, githubResult] = await Promise.allSettled([connectionService.googleStatus(), connectionService.githubStatus()])
+    if (googleResult.status === 'fulfilled') setGoogleConnection(googleResult.value)
+    if (githubResult.status === 'fulfilled') setGithubConnection(githubResult.value)
+    const failure = googleResult.status === 'rejected' ? googleResult.reason
+      : githubResult.status === 'rejected' ? githubResult.reason : null
+    if (failure) setConnectionsError(failure instanceof Error ? failure.message : '연결 상태를 불러오지 못했습니다.')
+    setConnectionsBusy(false)
+  }
+
+  async function connectGitHub() {
+    if (!githubToken.trim()) return
+    setConnectionsBusy(true)
+    setConnectionsError('')
     try {
-      setGoogleConnection(await connectionService.googleStatus())
+      const status = await connectionService.connectGitHub(githubToken.trim())
+      setGithubConnection(status)
+      setGithubToken('')
     } catch (cause) {
-      setConnectionsError(cause instanceof Error ? cause.message : '연결 상태를 불러오지 못했습니다.')
+      setConnectionsError(cause instanceof Error ? cause.message : 'GitHub 연결을 저장하지 못했습니다.')
+    } finally {
+      setConnectionsBusy(false)
+    }
+  }
+
+  async function disconnectGitHub() {
+    setConnectionsBusy(true)
+    setConnectionsError('')
+    try {
+      await connectionService.disconnectGitHub()
+      setGithubConnection(await connectionService.githubStatus())
+    } catch (cause) {
+      setConnectionsError(cause instanceof Error ? cause.message : 'GitHub 연결을 해제하지 못했습니다.')
     } finally {
       setConnectionsBusy(false)
     }
@@ -939,11 +1084,216 @@ export default function App() {
     }
   }
 
+  async function handleImportGithubRepository() {
+    if (!githubRepositoryUrl.trim() || !githubProjectName.trim()) {
+      setProjectError('GitHub 저장소 주소와 프로젝트 이름을 입력해 주세요.')
+      return
+    }
+    setProjectBusy(true)
+    setProjectError('')
+    setLocalProjectDirectory(null)
+    setPendingProjectDirectory(null)
+    try {
+      const imported = await projectService.importGithubRepository(githubProjectName, githubRepositoryUrl)
+      setProjectMembers(await projectService.listMembers(imported.id))
+      setProjectTasks([])
+      setWorkspace(imported)
+      setProjectVersions([])
+      setVersionPreview(null)
+      resetProjectFiles(imported.files[0]?.path ?? '')
+      setProjectDirty(false)
+      setProjectNeedsReload(false)
+      setProjectNotice('GitHub 저장소를 가져왔어요. 비밀 파일과 지원하지 않는 파일은 가져오지 않습니다.')
+      void projectService.githubSource(imported.id).then((source) => { if (workspaceRef.current?.id === imported.id) setGithubSource(source) }).catch(() => undefined)
+      setProjects((current) => [{
+        id: imported.id,
+        name: imported.name,
+        description: imported.description,
+        draft_version: imported.draft_version,
+        updated_at: imported.updated_at,
+        role: imported.role,
+      }, ...current])
+      setView('workspace')
+      setProjectListPanel(null)
+      setGithubRepositoryUrl('')
+      setGithubProjectName('')
+    } catch (cause) {
+      setProjectError(cause instanceof Error ? cause.message : 'GitHub 저장소를 가져오지 못했습니다.')
+    } finally {
+      setProjectBusy(false)
+    }
+  }
+
+  async function selectGoogleDriveProjectFiles(): Promise<ProjectWorkspace['files'] | null> {
+    const pickerConfig = await connectionService.googleDrivePickerConfig()
+    const selections = await pickGoogleDriveFiles(pickerConfig)
+    if (!selections?.length) return null
+    if (selections.length > 50) throw new Error('한 번에 최대 50개 파일까지 가져올 수 있습니다.')
+    const files: ProjectWorkspace['files'] = []
+    for (const selection of selections) {
+      const driveFile = await connectionService.importGoogleDriveFile(selection.id)
+      const path = uniqueProjectPath(driveFile.file_path, files, 'file')
+      files.push({ path, content: driveFile.content })
+    }
+    const totalBytes = new Blob(files.map((file) => file.content)).size
+    if (totalBytes > 1_000_000) throw new Error('가져온 파일의 전체 크기는 1MB 이하여야 합니다. 파일 수를 줄여 다시 선택해 주세요.')
+    return files
+  }
+
+  async function handleImportGoogleDriveFile() {
+    setProjectBusy(true)
+    setProjectError('')
+    setLocalProjectDirectory(null)
+    setPendingProjectDirectory(null)
+    try {
+      const files = await selectGoogleDriveProjectFiles()
+      if (!files?.length) return
+      const baseName = files[0]!.path.split('/').pop()!.replace(/\.[^.]+$/, '').trim() || 'Drive 프로젝트'
+      const projectName = files.length > 1 ? `${baseName} 외 ${files.length - 1}개 파일` : baseName
+      const imported = await projectService.importFiles(projectName.slice(0, 120), files)
+      setProjectMembers(await projectService.listMembers(imported.id))
+      setProjectTasks([])
+      setWorkspace(imported)
+      setProjectVersions([])
+      setVersionPreview(null)
+      resetProjectFiles(imported.files[0]?.path ?? '')
+      setProjectDirty(false)
+      setProjectNeedsReload(false)
+      setProjectNotice(`Google Drive에서 ${files.length}개 파일을 새 프로젝트로 가져왔어요.`)
+      setProjects((current) => [{
+        id: imported.id,
+        name: imported.name,
+        description: imported.description,
+        draft_version: imported.draft_version,
+        updated_at: imported.updated_at,
+        role: imported.role,
+      }, ...current])
+      setView('workspace')
+      setProjectListPanel(null)
+    } catch (cause) {
+      setProjectError(cause instanceof Error ? cause.message : 'Google Drive 파일을 가져오지 못했습니다.')
+    } finally {
+      setProjectBusy(false)
+    }
+  }
+
+  async function createDriveDataImportProject() {
+    if (projectBusy) return
+    setProjectBusy(true)
+    setProjectError('')
+    setLocalProjectDirectory(null)
+    setPendingProjectDirectory(null)
+    try {
+      const selectedFiles = await selectGoogleDriveProjectFiles()
+      if (!selectedFiles?.length) return
+      if (selectedFiles.length > 49) throw new Error('프로젝트에 main.py를 함께 만들기 위해 CSV·JSON 파일은 최대 49개까지 선택해 주세요.')
+      const unsupported = selectedFiles.filter((file) => !/\.(csv|json)$/i.test(file.path))
+      if (unsupported.length) throw new Error('DB 가져오기 프로젝트에는 CSV 또는 JSON 파일만 선택해 주세요.')
+
+      const usedTables = new Set<string>()
+      const importStatements = selectedFiles.map((file) => {
+        const sourceName = file.path.split('/').pop() ?? 'data'
+        const rawTable = sourceName.replace(/\.(csv|json)$/i, '').toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '')
+        const baseTable = /^[a-z]/.test(rawTable) ? rawTable.slice(0, 63) : `data_${rawTable || 'import'}`.slice(0, 63)
+        let tableName = baseTable
+        let suffix = 2
+        while (usedTables.has(tableName)) {
+          const ending = `_${suffix++}`
+          tableName = `${baseTable.slice(0, 63 - ending.length)}${ending}`
+        }
+        usedTables.add(tableName)
+        const importer = file.path.toLowerCase().endsWith('.csv') ? 'import_csv_to_sqlite' : 'import_json_to_sqlite'
+        return `        result = ${importer}(database, ${JSON.stringify(file.path)}, ${JSON.stringify(tableName)})\n        print(f"{result['table_name']}: {result['row_count']}개 행, {len(result['columns'])}개 열")`
+      })
+      const source = [
+        'import sqlite3',
+        'from weblink_api import import_csv_to_sqlite, import_json_to_sqlite',
+        '',
+        '# 파일을 다시 가져오면 연결된 테이블의 기존 행은 파일 내용으로 교체됩니다.',
+        'DATABASE_PATH = "/data/imported_data.db"',
+        '',
+        'try:',
+        '    with sqlite3.connect(DATABASE_PATH) as database:',
+        ...importStatements,
+        'except Exception as error:',
+        '    print(f"가져오기에 실패해 이번 변경을 저장하지 않았습니다: {error}")',
+        '    raise',
+        '',
+        'print(f"\\n데이터베이스 저장 위치: {DATABASE_PATH}")',
+      ].join('\n')
+      const files: ProjectWorkspace['files'] = [
+        ...selectedFiles,
+        { path: 'main.py', content: `${source}\n` },
+      ]
+      const firstName = selectedFiles[0]!.path.split('/').pop()!.replace(/\.(csv|json)$/i, '').trim() || 'Drive'
+      const projectName = `${firstName}${selectedFiles.length > 1 ? ` 외 ${selectedFiles.length - 1}개` : ''} 데이터 DB`
+      const imported = await projectService.importFiles(projectName.slice(0, 120), files)
+      const members = await projectService.listMembers(imported.id)
+      setProjectMembers(members)
+      setProjectTasks([])
+      setProjectTeamActivity([])
+      setWorkspace(imported)
+      setProjects((current) => [{
+        id: imported.id,
+        name: imported.name,
+        description: imported.description,
+        draft_version: imported.draft_version,
+        updated_at: imported.updated_at,
+        role: imported.role,
+      }, ...current.filter((item) => item.id !== imported.id)])
+      setProjectVersions([])
+      setVersionPreview(null)
+      resetProjectFiles('main.py')
+      setProjectDirty(false)
+      setProjectNeedsReload(false)
+      setProjectAccessLost(false)
+      setProjectListPanel(null)
+      setView('workspace')
+      setProjectNotice('CSV·JSON을 프로젝트 SQLite DB에 가져오는 코드를 만들었어요. 실행하면 /data/imported_data.db에 저장되고, 다시 실행하면 같은 테이블의 행은 파일 내용으로 교체됩니다.')
+    } catch (cause) {
+      setProjectError(cause instanceof Error ? cause.message : 'Drive 데이터 프로젝트를 만들지 못했습니다.')
+    } finally {
+      setProjectBusy(false)
+    }
+  }
+
+  async function addGoogleDriveFilesToProject() {
+    if (!workspace || isProjectReadOnly) return
+    setProjectBusy(true)
+    setProjectError('')
+    try {
+      const importedFiles = await selectGoogleDriveProjectFiles()
+      if (!importedFiles?.length) return
+      const mergedFiles = [...workspace.files]
+      const uniqueFiles: ProjectWorkspace['files'] = []
+      for (const file of importedFiles) {
+        const nextFile = { ...file, path: uniqueProjectPath(file.path, mergedFiles, 'file') }
+        mergedFiles.push(nextFile)
+        uniqueFiles.push(nextFile)
+      }
+      if (mergedFiles.length > 50) throw new Error('프로젝트 파일은 폴더 표시 파일을 포함해 50개까지 저장할 수 있습니다.')
+      const totalBytes = new Blob(mergedFiles.map((file) => file.content)).size
+      if (totalBytes > 1_000_000) throw new Error('가져온 뒤 프로젝트 파일 전체가 1MB를 넘습니다. 기존 파일이나 가져올 파일 수를 줄여 주세요.')
+      setWorkspace({ ...workspace, files: mergedFiles.sort((left, right) => left.path.localeCompare(right.path)) })
+      openProjectFile(uniqueFiles[0]!.path)
+      setProjectDirty(true)
+      setProjectNotice(`${uniqueFiles.length}개 Drive 파일을 프로젝트에 추가했습니다. 초안을 저장하면 적용됩니다.`)
+    } catch (cause) {
+      setProjectError(cause instanceof Error ? cause.message : 'Drive 파일을 프로젝트에 추가하지 못했습니다.')
+    } finally {
+      setProjectBusy(false)
+    }
+  }
+
   async function openProject(projectId: string) {
     setProjectBusy(true)
     setProjectError('')
     setProjectNotice('')
     setProjectMembers([])
+    setOnlineProjectMemberIds([])
+    setProjectEventsConnected(false)
+    setProjectTeamActivity([])
+    setGithubSource(null)
     setProjectTasks([])
     setProjectAccessLost(false)
     setEditingProjectDetails(false)
@@ -966,6 +1316,7 @@ export default function App() {
       setProjectDirty(false)
       setProjectNeedsReload(false)
       setView('workspace')
+      void projectService.githubSource(projectId).then((source) => { if (workspaceRef.current?.id === projectId) setGithubSource(source) }).catch(() => undefined)
     } catch (cause) {
       setProjectError(cause instanceof Error ? cause.message : '프로젝트를 열지 못했습니다.')
     } finally {
@@ -1615,6 +1966,72 @@ export default function App() {
     }
   }
 
+  async function createProjectInviteLink(email = memberEmail, role = memberRole) {
+    if (!workspace || !canManageProject || !email.trim()) return
+    setProjectBusy(true)
+    setProjectError('')
+    setProjectInviteLink('')
+    try {
+      const invitation = await projectService.createInvitation(workspace.id, email, role)
+      setProjectInvitations(await projectService.listInvitations(workspace.id))
+      const link = new URL(window.location.href)
+      link.search = ''
+      link.hash = ''
+      link.searchParams.set('project_invite', invitation.token)
+      setProjectInviteLink(link.toString())
+      setProjectNotice(invitation.email_status === 'sent'
+        ? `${invitation.email}님에게 초대 이메일을 보냈습니다. 링크는 7일 동안 유효합니다.`
+        : invitation.email_status === 'failed'
+          ? `초대 링크는 만들었지만 이메일 전송에 실패했습니다. 링크를 복사해 ${invitation.email}님에게 전달해 주세요.`
+          : `초대 링크를 만들었습니다. 메일 전송 설정이 없어 링크를 복사해 ${invitation.email}님에게 전달해 주세요.`)
+    } catch (cause) {
+      setProjectError(cause instanceof Error ? cause.message : '초대 링크를 만들지 못했습니다.')
+    } finally {
+      setProjectBusy(false)
+    }
+  }
+
+  async function revokeProjectInvitation(invitation: ManagedProjectInvitation) {
+    if (!workspace || !canManageProject) return
+    const isExpired = invitation.status === 'EXPIRED'
+    const confirmation = isExpired
+      ? `${invitation.email}님의 만료된 초대 기록을 목록에서 삭제할까요?`
+      : `${invitation.email}님에게 전달한 초대 링크를 취소할까요? 취소 후에는 링크를 사용할 수 없습니다.`
+    if (!window.confirm(confirmation)) return
+    setProjectBusy(true)
+    setProjectError('')
+    try {
+      await projectService.revokeInvitation(workspace.id, invitation.id)
+      setProjectInvitations((current) => current.filter((item) => item.id !== invitation.id))
+      setProjectNotice(isExpired ? `${invitation.email}님의 만료 기록을 삭제했습니다.` : `${invitation.email} 초대를 취소했습니다.`)
+    } catch (cause) {
+      setProjectError(cause instanceof Error ? cause.message : '초대를 취소하지 못했습니다.')
+    } finally {
+      setProjectBusy(false)
+    }
+  }
+
+  async function acceptProjectInvite() {
+    if (!projectInviteToken || !user) return
+    setProjectBusy(true)
+    setProjectError('')
+    try {
+      const accepted = await projectService.acceptInvitation(projectInviteToken)
+      setProjectInviteToken('')
+      window.sessionStorage.removeItem('weblink.project-invite')
+      const url = new URL(window.location.href)
+      url.searchParams.delete('project_invite')
+      window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
+      await showProjects()
+      await openProject(accepted.project_id)
+      setProjectNotice(`‘${accepted.project_name}’ 프로젝트 초대를 수락했습니다.`)
+    } catch (cause) {
+      setProjectError(cause instanceof Error ? cause.message : '초대를 수락하지 못했습니다.')
+    } finally {
+      setProjectBusy(false)
+    }
+  }
+
   async function removeProjectMember(member: ProjectMember) {
     if (!workspace || !canManageProject || member.role === 'OWNER') return
     if (!window.confirm(`${member.display_name} (${member.email})님을 프로젝트에서 제외할까요?`)) return
@@ -1786,7 +2203,7 @@ export default function App() {
     }
   }
 
-  async function toggleTaskChecklistItem(task: ProjectTask, item: ProjectTaskChecklistItem) {
+  async function toggleTaskChecklistItem(task: ProjectTask, item: TaskChecklistItem) {
     if (!workspace || isProjectReadOnly) return
     setTaskChecklistBusyId(item.id)
     setProjectError('')
@@ -1800,7 +2217,7 @@ export default function App() {
     }
   }
 
-  async function deleteTaskChecklistItem(task: ProjectTask, item: ProjectTaskChecklistItem) {
+  async function deleteTaskChecklistItem(task: ProjectTask, item: TaskChecklistItem) {
     if (!workspace || isProjectReadOnly) return
     setTaskChecklistBusyId(item.id)
     setProjectError('')
@@ -1828,7 +2245,7 @@ export default function App() {
     if (nextOpen) markTaskActivityRead()
   }
 
-  async function openTaskFromActivity(activity: ProjectTaskActivity) {
+  async function openTaskInBoard(taskId: string) {
     if (!workspace) return
     setWorkspaceSection('tasks')
     markTaskActivityRead()
@@ -1837,18 +2254,22 @@ export default function App() {
     setTaskPriorityFilter('ALL')
     setTaskDeadlineFilter('ALL')
     setTaskActivityOpen(false)
-    setOpenTaskDiscussionId(activity.task_id)
+    setOpenTaskDiscussionId(taskId)
     try {
       const [discussion, checklist] = await Promise.all([
-        projectService.getTaskDiscussion(workspace.id, activity.task_id),
-        projectService.listTaskChecklist(workspace.id, activity.task_id),
+        projectService.getTaskDiscussion(workspace.id, taskId),
+        projectService.listTaskChecklist(workspace.id, taskId),
       ])
-      setTaskDiscussions((current) => ({ ...current, [activity.task_id]: discussion }))
-      setTaskChecklists((current) => ({ ...current, [activity.task_id]: checklist }))
-      window.setTimeout(() => document.getElementById(`project-task-${activity.task_id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80)
+      setTaskDiscussions((current) => ({ ...current, [taskId]: discussion }))
+      setTaskChecklists((current) => ({ ...current, [taskId]: checklist }))
+      window.setTimeout(() => document.getElementById(`project-task-${taskId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80)
     } catch (cause) {
       setProjectError(cause instanceof Error ? cause.message : '작업 기록을 불러오지 못했습니다.')
     }
+  }
+
+  async function openTaskFromActivity(activity: ProjectTaskActivity) {
+    await openTaskInBoard(activity.task_id)
   }
 
   async function toggleTaskDiscussion(task: ProjectTask) {
@@ -1979,6 +2400,53 @@ export default function App() {
         : `현재 WebLink 파일을 ${localProjectDirectory.name} 폴더에 기록했어요. GitHub Desktop에서 변경 사항을 확인할 수 있습니다.`)
     } catch (cause) {
       setProjectError(cause instanceof Error ? cause.message : '로컬 폴더에 저장하지 못했습니다.')
+    } finally {
+      setProjectBusy(false)
+    }
+  }
+
+  async function refreshGitHubSource() {
+    if (!workspace || !githubSource?.connected) return
+    setProjectBusy(true)
+    setProjectError('')
+    try {
+      setGithubSource(await projectService.githubSource(workspace.id))
+    } catch (cause) {
+      setProjectError(cause instanceof Error ? cause.message : 'GitHub 변경을 확인하지 못했습니다.')
+    } finally {
+      setProjectBusy(false)
+    }
+  }
+
+  async function pullGitHubSourceUpdates() {
+    if (!workspace || !githubSource?.connected || projectDirty || projectNeedsReload || isProjectReadOnly) return
+    const repositoryLabel = githubSource.repository_url?.replace('https://github.com/', '') ?? 'GitHub 저장소'
+    if (!window.confirm(`${repositoryLabel}의 ${githubSource.branch ?? '기본 브랜치'} 파일로 현재 WebLink 초안을 교체할까요? 바꾸기 전에 현재 초안을 저장 버전으로 백업합니다. 연결된 컴퓨터 폴더는 자동으로 수정하지 않습니다.`)) return
+    setProjectBusy(true)
+    setProjectError('')
+    try {
+      const result = await projectService.pullGithubUpdates(workspace.id, workspace.draft_version)
+      const nextWorkspace = result.workspace
+      setWorkspace(nextWorkspace)
+      setProjects((items) => items.map((item) => item.id === nextWorkspace.id
+        ? { ...item, draft_version: nextWorkspace.draft_version, updated_at: nextWorkspace.updated_at }
+        : item))
+      setProjectVersions(await projectService.listVersions(nextWorkspace.id))
+      const availablePaths = new Set(nextWorkspace.files.map((file) => file.path))
+      setOpenFilePaths((paths) => {
+        const retained = paths.filter((path) => availablePaths.has(path))
+        return retained.length ? retained : nextWorkspace.files[0] ? [nextWorkspace.files[0].path] : []
+      })
+      setSelectedPath((path) => availablePaths.has(path) ? path : nextWorkspace.files[0]?.path ?? '')
+      setGithubSource((current) => current ? { ...current, imported_sha: result.imported_sha, latest_sha: result.imported_sha, update_available: false } : current)
+      setProjectDirty(false)
+      setProjectNeedsReload(false)
+      setProjectError('')
+      setProjectNotice(result.backup_version_name
+        ? `GitHub 변경을 초안 v${nextWorkspace.draft_version}에 반영했습니다. 이전 내용은 ‘${result.backup_version_name}’ 저장 버전에서 복원할 수 있어요.${localProjectDirectory ? ' 연결된 컴퓨터 폴더에는 자동 반영되지 않았습니다.' : ''}`
+        : `GitHub 저장소와 파일이 같아 최신 커밋만 확인했습니다.${localProjectDirectory ? ' 연결된 컴퓨터 폴더는 별도로 갱신해야 합니다.' : ''}`)
+    } catch (cause) {
+      setProjectError(cause instanceof Error ? cause.message : 'GitHub 변경을 반영하지 못했습니다.')
     } finally {
       setProjectBusy(false)
     }
@@ -2303,6 +2771,17 @@ export default function App() {
   const completedTaskCount = projectTasks.filter((task) => task.status === 'DONE').length
   const overdueTaskCount = projectTasks.filter((task) => task.status !== 'DONE' && !!task.due_date && task.due_date < todayForTasks).length
   const taskCompletionPercent = projectTasks.length ? Math.round(completedTaskCount / projectTasks.length * 100) : 0
+  const dashboardDueTasks = projectTasks
+    .filter((task) => task.status !== 'DONE' && task.due_date)
+    .sort((left, right) => (left.due_date ?? '').localeCompare(right.due_date ?? ''))
+    .slice(0, 4)
+  const projectSetupSteps = [
+    { id: 'intro', icon: '✎', title: '프로젝트 소개 작성', detail: '팀원이 목표와 방향을 이해하도록 설명을 적어요.', done: Boolean(workspace?.description.trim()), action: () => beginProjectDetailsEdit() },
+    { id: 'readme', icon: '▤', title: 'README 준비', detail: '실행 방법과 파일 구조를 문서로 남겨요.', done: Boolean(projectReadmeFile), action: () => { if (projectReadmeFile) { openProjectFile(projectReadmeFile.path); setWorkspaceSection('code') } else void openOrCreateProjectReadme() } },
+    { id: 'task', icon: '✓', title: '첫 작업 등록', detail: '할 일을 나눠 팀의 진행 상황을 기록해요.', done: projectTasks.length > 0, action: () => setWorkspaceSection('tasks') },
+    { id: 'team', icon: '♧', title: '팀원과 공유', detail: 'WebLink 계정으로 편집 권한을 나눠요.', done: projectMembers.length > 1, action: () => setWorkspaceSection('team') },
+    { id: 'folder', icon: '⌂', title: '이 컴퓨터 폴더 연결', detail: 'GitHub Desktop 저장소와 파일을 이어 쓸 수 있어요.', done: Boolean(localProjectDirectory), action: () => setWorkspaceSection('storage') },
+  ]
   const unreadTaskActivityCount = projectTaskActivity.filter((activity) => !seenTaskActivityIds.includes(activity.id)).length
   const myOverdueTaskCount = projectTasks.filter((task) => task.assignee_id === user?.id && task.status !== 'DONE' && !!task.due_date && task.due_date < todayForTasks).length
   const myDueSoonTaskCount = projectTasks.filter((task) => task.assignee_id === user?.id && task.status !== 'DONE' && !!task.due_date && task.due_date >= todayForTasks && task.due_date <= weekCutoffForTasks).length
@@ -2323,18 +2802,37 @@ export default function App() {
           </nav>
           <div className="account-menu"><span>{user.display_name}</span><button type="button" onClick={handleLogout}>로그아웃</button></div>
         </header>
+        {projectInviteToken && <aside className="project-invite-banner" role="status"><div><strong>프로젝트 초대를 받았어요</strong><span>{user.email} 계정으로 로그인되어 있습니다. 초대받은 이메일과 다르면 해당 계정으로 다시 로그인해 주세요.</span></div><button className="primary-button" type="button" onClick={() => void acceptProjectInvite()} disabled={projectBusy}>{projectBusy ? '초대 확인 중…' : '초대 수락'}</button><button className="secondary-button" type="button" onClick={() => { setProjectInviteToken(''); window.sessionStorage.removeItem('weblink.project-invite'); const url = new URL(window.location.href); url.searchParams.delete('project_invite'); window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`) }}>닫기</button></aside>}
         {view === 'connections' ? (
           <main className="connections-main">
             <div className="connections-heading"><p className="eyebrow">프로젝트와 외부 서비스</p><h1>연결 앱</h1><p>외부 앱 연결을 안전하게 관리하고, 프로젝트에서 필요한 데이터만 읽어 올 수 있어요.</p></div>
             {new URLSearchParams(window.location.search).get('connection') === 'google_connected' && <p className="project-notice connection-message">Google 계정을 연결했어요. 이제 스프레드시트 데이터를 확인할 수 있어요.</p>}
             {new URLSearchParams(window.location.search).get('connection')?.startsWith('google_') && new URLSearchParams(window.location.search).get('connection') !== 'google_connected' && <p className="form-error connection-message" role="alert">Google 연결이 완료되지 않았어요. 설정과 계정 권한을 확인한 뒤 다시 시도해 주세요.</p>}
             {connectionsError && <p className="form-error connection-message" role="alert">{connectionsError}</p>}
-            {connectionsBusy && !googleConnection ? <p className="connection-loading">연결 상태를 확인하고 있어요…</p> : (
+            {connectionsBusy && (!googleConnection || !githubConnection) ? <p className="connection-loading">연결 상태를 확인하고 있어요…</p> : (
+              <>
+              <section className="connection-card github-connection-card">
+                <div className="connection-title"><span className="github-mark" aria-hidden="true">GH</span><div><h2>GitHub 저장소</h2><p>비공개 저장소에서 프로젝트 가져오기</p></div><span className={`connection-badge ${githubConnection?.connected ? 'connected' : ''}`}>{githubConnection?.connected ? '연결됨' : '연결 안 됨'}</span></div>
+                {!githubConnection ? <div className="connection-setup"><strong>GitHub 연결 상태를 확인하지 못했어요</strong><p>API 연결 상태를 확인한 다음 다시 시도해 주세요.</p><button className="secondary-button" type="button" onClick={() => void showConnections()} disabled={connectionsBusy}>다시 확인</button></div> : githubConnection.connected ? <>
+                  <p className="connected-account">연결 계정 <strong>{githubConnection.account_name}</strong></p>
+                  <p className="connection-description">저장한 토큰은 암호화해 보관하며, 저장소 파일을 새 프로젝트로 한 번 가져오는 데 사용해요. GitHub에 변경 사항을 올리거나 자동 동기화하지 않습니다.</p>
+                  <button className="disconnect-button" type="button" onClick={disconnectGitHub} disabled={connectionsBusy}>{connectionsBusy ? '처리 중…' : 'WebLink 연결 해제'}</button>
+                  <p className="connection-footnote">연결 해제는 WebLink에 저장된 토큰을 지웁니다. GitHub 토큰 자체를 폐기하려면 GitHub 설정에서도 삭제해 주세요.</p>
+                </> : githubConnection?.configured ? <>
+                  <p className="connection-description">GitHub 세분화된 개인용 액세스 토큰(Fine-grained token)을 연결하면 선택한 비공개 저장소를 가져올 수 있어요. 토큰은 연결을 확인한 뒤 암호화해 저장하고 화면에는 다시 표시하지 않습니다.</p>
+                  <ol className="github-token-steps"><li>GitHub에서 세분화된 토큰을 만들고 사용할 저장소만 선택하세요.</li><li>저장소 권한의 Contents를 Read-only로 설정하세요. Metadata는 기본 읽기 권한으로 둡니다.</li><li>아래 입력란에 토큰을 붙여넣고 연결하세요.</li></ol>
+                  <label className="github-token-field">GitHub 토큰<input type="password" autoComplete="new-password" spellCheck={false} value={githubToken} onChange={(event) => setGithubToken(event.target.value)} maxLength={500} placeholder="github_pat_…" /></label>
+                  <button className="primary-button" type="button" onClick={() => void connectGitHub()} disabled={connectionsBusy || githubToken.trim().length < 20}>{connectionsBusy ? '토큰 확인 중…' : 'GitHub 연결'}</button>
+                  <p className="connection-footnote">토큰은 저장소 파일 읽기 권한만 주세요. 연결 암호화 키가 서버에 설정되어 있어야 연결을 저장할 수 있어요. 토큰은 비밀번호처럼 취급하고 다른 사람과 공유하지 마세요.</p>
+                </> : <div className="connection-setup"><strong>서버 암호화 설정이 필요해요</strong><p>개인 GitHub 토큰을 안전하게 저장하려면 `.env`에 `CONNECTION_ENCRYPTION_KEY`를 설정하고 API를 다시 시작해야 합니다. Google 연결에서 이미 같은 키를 사용한다면 추가 설정은 필요하지 않아요.</p><code>CONNECTION_ENCRYPTION_KEY</code></div>}
+              </section>
               <section className="connection-card">
-                <div className="connection-title"><span className="google-mark" aria-hidden="true">G</span><div><h2>Google Sheets</h2><p>스프레드시트 읽기 전용 연결</p></div><span className={`connection-badge ${googleConnection?.connected ? 'connected' : ''}`}>{googleConnection?.connected ? '연결됨' : '연결 안 됨'}</span></div>
+                <div className="connection-title"><span className="google-mark" aria-hidden="true">G</span><div><h2>Google Sheets</h2><p>스프레드시트 읽기·쓰기 연결</p></div><span className={`connection-badge ${googleConnection?.connected ? 'connected' : ''}`}>{googleConnection?.connected ? '연결됨' : '연결 안 됨'}</span></div>
                 {googleConnection?.connected ? <>
                   <p className="connected-account">연결 계정 <strong>{googleConnection.account_email ?? 'Google 계정'}</strong></p>
-                  <p className="connection-description">프로젝트는 연결한 계정이 읽을 수 있는 스프레드시트 값만 가져올 수 있어요. Google 토큰은 암호화해 보관하고 실행 코드에는 전달하지 않아요.</p>
+                  <p className="connection-description">연결한 계정이 접근할 수 있는 스프레드시트에서 필요한 범위를 읽고, 편집 권한이 있는 범위에 값을 기록할 수 있어요. Google 토큰은 암호화해 보관하고 실행 코드에는 전달하지 않아요.</p>
+                  {!googleConnection.scopes.includes('https://www.googleapis.com/auth/spreadsheets') && <div className="connection-scope-notice"><p>현재 연결은 Sheets 읽기 권한만 포함해요. 프로젝트 코드에서 시트에 쓰려면 권한을 추가해야 합니다.</p><button className="secondary-button" type="button" onClick={startGoogleConnection} disabled={connectionsBusy}>{connectionsBusy ? '준비 중…' : 'Sheets 쓰기 권한 추가'}</button></div>}
+                  <details className="drive-connection-setup"><summary>Google Drive 파일 가져오기 설정</summary>{googleConnection.scopes.includes('https://www.googleapis.com/auth/drive.file') ? googleConnection.drive_picker_configured ? <p>Drive에서 사용자가 직접 선택한 파일만 가져올 수 있어요.</p> : <div className="connection-setup"><strong>Picker 설정이 필요해요</strong><p>API 설정에 Picker API 키와 Google Cloud 프로젝트 번호를 추가해 주세요. API key는 사용할 도메인으로 제한해야 합니다.</p><code>GOOGLE_PICKER_API_KEY</code><code>GOOGLE_CLOUD_PROJECT_NUMBER</code></div> : <div><p>현재 연결에는 시트 읽기 권한만 있어요. 파일 선택 권한을 추가해도 Picker에서 직접 선택한 파일만 읽습니다.</p><button className="secondary-button" type="button" onClick={startGoogleConnection} disabled={connectionsBusy}>{connectionsBusy ? '준비 중…' : 'Drive 파일 선택 권한 추가'}</button></div>}</details>
                   <form className="sheet-preview-form" onSubmit={previewGoogleSheet}>
                     <h3>시트 데이터 미리보기</h3>
                     <label>스프레드시트 ID 또는 주소<input value={spreadsheetId} onChange={(event) => { setSpreadsheetId(event.target.value); setSheetPreview(null) }} required maxLength={500} placeholder="ID 또는 Google Sheets 주소를 붙여넣으세요" /></label>
@@ -2345,49 +2843,40 @@ export default function App() {
                   <details className="connection-code"><summary>프로젝트 코드에서 사용하는 방법</summary><pre>{`from weblink_api import get_google_sheet\n\nsheet = get_google_sheet("${spreadsheetId || 'SPREADSHEET_ID'}", "${sheetRange || 'Sheet1!A1:Z100'}")\nrows = sheet["values"]\nprint(rows)`}</pre><p>실행 코드는 네트워크에 직접 연결하지 않고, 실행별로 제한된 WebLink 연결 경로를 사용해요.</p></details>
                   <button className="disconnect-button" type="button" onClick={disconnectGoogleConnection} disabled={connectionsBusy}>{connectionsBusy ? '처리 중…' : 'Google 연결 해제'}</button>
                 </> : <>
-                  <p className="connection-description">Google Sheets를 연결하면 프로젝트에서 허용된 시트 범위를 읽고, 필요한 데이터를 로컬 데이터베이스에 저장하는 흐름을 연습할 수 있어요. 쓰기 권한은 요청하지 않아요.</p>
+                  <p className="connection-description">Google Sheets 데이터를 확인하거나, 권한을 추가하면 Google Drive에서 선택한 텍스트 파일을 프로젝트로 가져올 수 있어요. OAuth 비밀값은 서버에 암호화해 보관합니다.</p>
                   {googleConnection?.configured ? <button className="primary-button" type="button" onClick={startGoogleConnection} disabled={connectionsBusy}>{connectionsBusy ? '준비 중…' : 'Google 계정 연결하기'}</button> : <div className="connection-setup"><strong>서버 설정이 필요해요</strong><p>`.env`에 Google OAuth 웹 클라이언트 정보와 연결 암호화 키를 넣고 Docker 서비스를 다시 시작하면 연결 버튼이 활성화돼요.</p><code>GOOGLE_OAUTH_CLIENT_ID</code><code>GOOGLE_OAUTH_CLIENT_SECRET</code><code>CONNECTION_ENCRYPTION_KEY</code><small>리디렉션 주소: http://localhost:8000/api/v1/connections/google/oauth/callback</small></div>}
                 </>}
               </section>
+              </>
             )}
           </main>
         ) : view === 'projects' ? (
           <main className="project-list-main">
-            <div className="project-heading"><p className="eyebrow">내 저장소에서 만들고, 함께 작업하기</p><h1>프로젝트 작업 공간</h1><p>WebLink 계정으로 팀원에게 프로젝트 편집 권한을 주고, GitHub Desktop으로 코드 저장소도 함께 관리할 수 있어요.</p></div>
-            <section className="project-storage-hub" aria-label="프로젝트 저장 방식">
-              <div className="storage-hub-heading"><div><p className="eyebrow">저장 위치와 협업</p><h2>내 코드, 내가 선택한 저장소</h2></div><span>Drive 연결은 이후 추가</span></div>
+                  <div className="project-heading-row"><div className="project-heading"><p className="eyebrow">내 저장소에서 만들고, 함께 작업하기</p><h1>프로젝트 작업 공간</h1><p>프로젝트를 열어 팀원과 작업하거나, 내 컴퓨터·GitHub 저장소에 연결해 계속 개발하세요.</p></div><div className="project-list-actions"><button className="secondary-button" type="button" onClick={() => { setProjectListPanel(projectListPanel === 'import' ? null : 'import'); setArchiveToImport(null); setArchiveProjectName('') }}>가져오기</button><button className="primary-button" type="button" onClick={() => { setProjectListPanel(projectListPanel === 'create' ? null : 'create'); setArchiveToImport(null); setArchiveProjectName('') }}>＋ 새 프로젝트</button></div></div>
+            <details className="project-storage-disclosure">
+              <summary><span>프로젝트 저장·공유 방법</span><small>WebLink · 내 컴퓨터/GitHub Desktop · Google Drive</small></summary>
+              <section className="project-storage-hub" aria-label="프로젝트 저장 방식">
+              <div className="storage-hub-heading"><div><p className="eyebrow">저장 위치와 협업</p><h2>내 코드, 내가 선택한 저장소</h2></div><span>연결 가능한 저장소 3개</span></div>
               <div className="storage-provider-grid">
                 <article className="storage-provider-card local-provider"><span className="storage-provider-icon" aria-hidden="true">⌂</span><div><h3>내 컴퓨터 · GitHub Desktop</h3><p>프로젝트를 연 뒤 내 컴퓨터 폴더와 연결하세요. 공유 저장소를 GitHub Desktop으로 복제해 두면 WebLink에서 편집한 파일을 그 폴더에 저장하고, 친구와는 GitHub에서 커밋·동기화할 수 있어요.</p><small>Chrome·Edge 지원 · ZIP 내보내기는 다른 브라우저에서도 사용 가능</small></div></article>
               <article className="storage-provider-card weblink-provider"><span className="storage-provider-icon" aria-hidden="true">W</span><div><h3>WebLink 실행 공간</h3><p>코드를 실행하고 DB·외부 앱 연결을 시험할 때 사용하는 작업용 공간입니다. 현재 이 앱은 직접 운영하는 Docker/PostgreSQL에 사본을 저장해요.</p><small>프로젝트 실행과 저장에 사용</small></div></article>
-                <article className="storage-provider-card planned-provider"><span className="storage-provider-icon" aria-hidden="true">↗</span><div><h3>Google Drive</h3><p>Drive에서 폴더와 파일을 고르고 바로 저장하는 연결은 다음 단계입니다.</p><small>아직 연결되지 않음</small></div></article>
+              <article className="storage-provider-card drive-provider"><span className="storage-provider-icon" aria-hidden="true">↗</span><div><h3>Google Drive</h3><p>Picker에서 선택한 텍스트 파일 여러 개를 새 프로젝트나 현재 프로젝트로 가져올 수 있어요.</p><small>파일당 200KB · 프로젝트 전체 1MB</small></div></article>
               </div>
               <p className="storage-hub-note">WebLink 안에서 함께 편집하려면 프로젝트를 연 뒤 팀원 이메일과 권한을 추가하세요. GitHub 저장소를 공유하려면 GitHub Desktop에서 친구가 초대한 저장소를 복제해 프로젝트 폴더로 연결한 다음, 변경 파일을 커밋하고 푸시하면 됩니다.</p>
-            </section>
+              </section>
+            </details>
             {projectNotice && <p className="project-notice project-list-notice" role="status">{projectNotice}</p>}
             <div className="project-list-layout">
-              <section className="project-cards">
-                <div className="project-cards-heading"><h2>내 작업</h2><label className="project-search"><span className="sr-only">프로젝트 검색</span><input value={projectSearch} onChange={(event) => setProjectSearch(event.target.value)} placeholder="프로젝트 검색" /></label></div>
-                {projectError && <p className="form-error" role="alert">{projectError}</p>}
-                {projectBusy && projects.length === 0 ? <p className="empty-projects">프로젝트를 불러오고 있어요…</p> : filteredProjects.length ? filteredProjects.map((project) => (
-                  <div className="project-card-entry" key={project.id}>
-                    <button className="project-card" type="button" onClick={() => openProject(project.id)} disabled={projectBusy}>
-                      <span className="project-card-icon">↗</span>
-                      <span className="project-card-copy"><strong>{project.name}</strong><small>{project.description || '설명이 아직 없습니다.'}</small><small>초안 v{project.draft_version} · {new Date(project.updated_at).toLocaleDateString('ko-KR')}</small><span className={`project-member-role project-member-role-${project.role.toLocaleLowerCase()}`}>{project.role === 'OWNER' ? '소유자' : project.role === 'EDITOR' ? '편집자로 참여' : '보기 전용으로 참여'}</span><span className="project-storage-badge">{projectFolders[project.id] ? `폴더 · ${projectFolders[project.id]}` : 'WebLink 작업 사본'}</span></span>
-                    </button>
-                    {project.role === 'OWNER' && <button className="plain-danger-button project-list-delete" type="button" onClick={() => deleteProjectById(project.id, project.name)} disabled={projectBusy} aria-label={`${project.name} 프로젝트 삭제`}>삭제</button>}
-                  </div>
-                )) : <p className="empty-projects">{projectSearch ? '검색어와 맞는 프로젝트가 없어요.' : '첫 프로젝트를 만들면 여기에서 작업을 이어갈 수 있어요.'}</p>}
-              </section>
-              <div className="project-side-actions">
-                <form className="project-create-form" onSubmit={handleCreateProject}>
-                  <p className="eyebrow">새 출발</p><h2>프로젝트 만들기</h2>
+              {projectListPanel && <div className="project-side-actions">
+                {projectListPanel === 'create' && <form className="project-create-form" onSubmit={handleCreateProject}>
+                  <div className="project-form-heading"><div><p className="eyebrow">새 출발</p><h2>프로젝트 만들기</h2></div><button className="panel-close-button" type="button" aria-label="프로젝트 만들기 닫기" onClick={() => setProjectListPanel(null)}>×</button></div>
                   <label>프로젝트 이름<input value={newProjectName} onChange={(event) => setNewProjectName(event.target.value)} required maxLength={120} placeholder="예: 나만의 인사말 앱" /></label>
                   <label>한 줄 설명<textarea value={newProjectDescription} onChange={(event) => setNewProjectDescription(event.target.value)} maxLength={1000} rows={3} placeholder="무엇을 만들고 싶나요?" /></label>
                   <button className="primary-button" type="submit" disabled={projectBusy}>{projectBusy ? '처리 중…' : '프로젝트 시작하기'}</button>
                   <div className="sample-project-start"><p>먼저 기능을 살펴보고 싶다면</p><button className="secondary-button" type="button" onClick={createSampleProject} disabled={projectBusy}>{projectBusy ? '예제 준비 중…' : 'SQLite 예제 열기'}</button><small>실행해 볼 수 있는 독서 기록 앱과 여러 파일을 만들어요.</small></div>
-                </form>
-                <form className="project-create-form project-import-form" onSubmit={handleImportProject}>
-                  <p className="eyebrow">다른 기기에서 가져오기</p><h2>프로젝트 ZIP 불러오기</h2>
+                </form>}
+                {projectListPanel === 'import' && <form className="project-create-form project-import-form" onSubmit={handleImportProject}>
+                  <div className="project-form-heading"><div><p className="eyebrow">다른 저장소에서 가져오기</p><h2>프로젝트 가져오기</h2></div><button className="panel-close-button" type="button" aria-label="가져오기 닫기" onClick={() => { setProjectListPanel(null); setArchiveToImport(null); setArchiveProjectName('') }}>×</button></div>
                   <p className="import-project-note">WebLink에서 내려받은 ZIP을 선택하세요. `.env`와 개인 키 파일은 가져오지 않습니다. ZIP은 1.5MB 이하, 압축을 푼 UTF-8 텍스트 파일은 전체 1MB 이하여야 해요.</p>
                   <label>ZIP 파일<input type="file" accept=".zip,application/zip,application/x-zip-compressed" onChange={(event) => {
                     const file = event.target.files?.[0] ?? null
@@ -2396,21 +2885,38 @@ export default function App() {
                   }} required /></label>
                   <label>새 프로젝트 이름<input value={archiveProjectName} onChange={(event) => setArchiveProjectName(event.target.value)} required maxLength={120} placeholder="가져온 프로젝트 이름" /></label>
                   <button className="primary-button" type="submit" disabled={projectBusy || !archiveToImport}>{projectBusy ? '가져오는 중…' : 'ZIP 가져오기'}</button>
-                </form>
-              </div>
+                  <details className="github-import-disclosure"><summary>GitHub 저장소에서 가져오기</summary><p>공개 저장소는 바로 가져오고, 비공개 저장소는 연결 앱에서 세분화된 토큰을 연결한 뒤 가져옵니다. 저장소의 기본 브랜치 파일을 새 프로젝트로 복사하며 ZIP은 1.5MB 이하만 지원합니다. 가져온 뒤 GitHub에 자동으로 올라가거나 동기화되지는 않습니다.</p><label>GitHub 저장소 주소<input type="url" value={githubRepositoryUrl} onChange={(event) => { const value = event.target.value; setGithubRepositoryUrl(value); const candidate = value.trim().replace(/\/+$/, '').split('/').pop()?.replace(/\.git$/i, '') ?? ''; if (candidate) setGithubProjectName((current) => current.trim() ? current : candidate.slice(0, 120)) }} maxLength={600} placeholder="https://github.com/owner/repository" /></label><label>프로젝트 이름<input value={githubProjectName} onChange={(event) => setGithubProjectName(event.target.value)} maxLength={120} placeholder="가져온 프로젝트 이름" /></label><button className="secondary-button" type="button" onClick={() => void handleImportGithubRepository()} disabled={projectBusy || !githubRepositoryUrl.trim() || !githubProjectName.trim()}>{projectBusy ? '저장소 확인 중…' : 'GitHub 저장소 가져오기'}</button><button className="plain-link-button" type="button" onClick={showConnections}>GitHub 권한 연결·관리</button></details>
+                  <details className="google-drive-import-disclosure"><summary>Google Drive 파일에서 새 프로젝트 만들기</summary><p>Google 계정을 연결하고 WebLink Picker 설정이 필요해요. 텍스트·Markdown·CSV·JSON·HTML·CSS 파일과 Google Docs·Sheets를 최대 50개 골라 가져옵니다. 파일당 200KB, 전체 1MB까지 지원해요. 같은 이름의 파일은 자동으로 번호를 붙입니다.</p><button className="secondary-button" type="button" onClick={() => void handleImportGoogleDriveFile()} disabled={projectBusy}>{projectBusy ? 'Drive 파일 가져오는 중…' : 'Google Drive 파일 선택'}</button><button className="secondary-button" type="button" onClick={() => void createDriveDataImportProject()} disabled={projectBusy}>{projectBusy ? 'DB 프로젝트 준비 중…' : 'CSV·JSON으로 SQLite DB 프로젝트 만들기'}</button><small>최대 49개 파일을 골라 가져오기 코드를 생성해요. 실행하면 DB에 저장되고, 다시 실행하면 같은 테이블의 기존 행을 파일 내용으로 교체합니다.</small><button className="plain-link-button" type="button" onClick={showConnections}>연결 앱 설정 열기</button></details>
+                </form>}
+              </div>}
+              <section className="project-cards">
+                <div className="project-cards-heading"><h2>내 프로젝트 <span className="project-count">{filteredProjects.length}</span></h2><div className="project-list-controls"><label className="project-search"><span className="sr-only">프로젝트 검색</span><input value={projectSearch} onChange={(event) => setProjectSearch(event.target.value)} placeholder="프로젝트 검색" /></label><label className="project-select-label"><span className="sr-only">참여 유형</span><select value={projectRoleFilter} onChange={(event) => setProjectRoleFilter(event.target.value as typeof projectRoleFilter)}><option value="ALL">전체 프로젝트</option><option value="OWNER">내가 소유</option><option value="MEMBER">참여 중</option></select></label><label className="project-select-label"><span className="sr-only">정렬 순서</span><select value={projectSort} onChange={(event) => setProjectSort(event.target.value as typeof projectSort)}><option value="UPDATED">최근 수정순</option><option value="NAME">이름순</option></select></label></div></div>
+                {projectError && <p className="form-error" role="alert">{projectError}</p>}
+                {projectBusy && projects.length === 0 ? <p className="empty-projects">프로젝트를 불러오고 있어요…</p> : filteredProjects.length ? <div className="project-card-grid">{filteredProjects.map((project) => (
+                  <div className="project-card-entry" key={project.id}>
+                    <button className="project-card" type="button" onClick={() => openProject(project.id)} disabled={projectBusy}>
+                      <span className="project-card-icon">↗</span>
+                      <span className="project-card-copy"><strong>{project.name}</strong><small>{project.description || '설명이 아직 없습니다.'}</small><small>초안 v{project.draft_version} · {new Date(project.updated_at).toLocaleDateString('ko-KR')}</small><span className={`project-member-role project-member-role-${project.role.toLocaleLowerCase()}`}>{project.role === 'OWNER' ? '소유자' : project.role === 'EDITOR' ? '편집자로 참여' : '보기 전용으로 참여'}</span><span className="project-storage-badge">{projectFolders[project.id] ? `폴더 · ${projectFolders[project.id]}` : 'WebLink 작업 사본'}</span></span>
+                    </button>
+                    {project.role === 'OWNER' && <button className="plain-danger-button project-list-delete" type="button" onClick={() => deleteProjectById(project.id, project.name)} disabled={projectBusy} aria-label={`${project.name} 프로젝트 삭제`}>삭제</button>}
+                  </div>
+                ))}</div> : projects.length || projectSearch || projectRoleFilter !== 'ALL' ? <div className="empty-projects"><strong>조건에 맞는 프로젝트가 없어요.</strong><p>검색어와 참여 유형을 바꾸거나 필터를 초기화해 보세요.</p><button className="secondary-button" type="button" onClick={() => { setProjectSearch(''); setProjectRoleFilter('ALL') }}>검색·필터 초기화</button></div> : <div className="empty-projects"><strong>첫 프로젝트를 시작해 보세요</strong><p>프로젝트를 만들거나 ZIP 파일을 가져오면 이곳에서 이어서 작업할 수 있어요.</p><button className="primary-button" type="button" onClick={() => setProjectListPanel('create')}>프로젝트 만들기</button></div>}
+              </section>
             </div>
           </main>
         ) : view === 'workspace' ? workspace ? (
           <main className="workspace-main">
             <div className="workspace-heading">
-              <div><button className="back-link" type="button" onClick={showProjects}>← 프로젝트 목록</button><div className="workspace-title-row"><h1>{workspace.name}</h1>{canManageProject && <button type="button" className="project-details-edit-button" onClick={beginProjectDetailsEdit} disabled={projectBusy || projectDirty} title={projectDirty ? '초안을 먼저 저장해 주세요.' : '프로젝트 이름과 설명 수정'} aria-label="프로젝트 이름과 설명 수정">✎</button>}</div><p>초안 버전 {workspace.draft_version}{projectDirty ? ' · 저장되지 않은 변경 사항' : ''}</p></div>
+              <div><button className="back-link" type="button" onClick={showProjects}>← 프로젝트 목록</button><div className="workspace-title-row"><h1>{workspace.name}</h1>{canManageProject && <button type="button" className="project-details-edit-button" onClick={beginProjectDetailsEdit} disabled={projectBusy || projectDirty} title={projectDirty ? '초안을 먼저 저장해 주세요.' : '프로젝트 이름과 설명 수정'} aria-label="프로젝트 이름과 설명 수정">✎</button>}</div><p>초안 버전 {workspace.draft_version}{projectBusy && projectDirty ? ' · 저장 중' : projectDirty && projectNeedsReload ? ' · 최신 초안 확인 필요' : projectDirty && projectError ? ' · 저장 문제 확인' : projectDirty ? ' · 1.5초 후 자동 저장' : ' · 저장됨'}</p></div>
               <div className="workspace-actions">
-                <button className="secondary-button" type="button" onClick={saveProjectDraft} disabled={projectBusy || isProjectReadOnly || !projectDirty}>{projectBusy ? '저장 중…' : '초안 저장'}</button>
-                {projectDirty && <button className="secondary-button" type="button" onClick={discardProjectChanges} disabled={projectBusy || isProjectReadOnly}>변경 취소</button>}
-                <button className="secondary-button" type="button" onClick={saveProjectVersion} disabled={projectBusy || isProjectReadOnly}>{projectBusy ? '처리 중…' : '버전 저장'}</button>
+                {projectDirty ? <button className="secondary-button" type="button" onClick={saveProjectDraft} disabled={projectBusy || isProjectReadOnly}>{projectBusy ? '저장 중…' : '초안 저장'}</button> : <span className="workspace-save-state">{isProjectReadOnly ? '보기 전용' : '✓ 저장됨'}</span>}
                 <button className="primary-button" type="button" onClick={runProject} disabled={projectBusy || isProjectReadOnly || !workspace.files.some((file) => file.path === 'main.py')} title={isProjectReadOnly ? '보기 전용 권한으로는 실행할 수 없습니다.' : !workspace.files.some((file) => file.path === 'main.py') ? '루트에 main.py 파일이 있어야 실행할 수 있습니다.' : undefined}>{projectBusy ? '실행 중…' : '실행'}</button>
-                <button className="secondary-button" type="button" onClick={downloadProjectArchive} disabled={projectBusy || projectAccessLost} title="초안을 저장한 뒤 프로젝트 파일을 ZIP으로 내려받습니다.">{projectBusy ? '처리 중…' : 'ZIP 다운로드'}</button>
-                <button className="plain-danger-button" type="button" onClick={deleteCurrentProject} disabled={projectBusy || !canManageProject}>프로젝트 삭제</button>
+                <details className="workspace-more-menu"><summary>더 보기</summary><div>
+                  {projectDirty && <button type="button" onClick={discardProjectChanges} disabled={projectBusy || isProjectReadOnly}>변경 취소</button>}
+                  <button type="button" onClick={saveProjectVersion} disabled={projectBusy || isProjectReadOnly}>{projectBusy ? '처리 중…' : '버전 저장'}</button>
+                  <button type="button" onClick={downloadProjectArchive} disabled={projectBusy || projectAccessLost}>{projectBusy ? '처리 중…' : 'ZIP 다운로드'}</button>
+                  {canManageProject && <button className="is-danger" type="button" onClick={deleteCurrentProject} disabled={projectBusy}>프로젝트 삭제</button>}
+                </div></details>
               </div>
             </div>
             {editingProjectDetails && <form className="project-details-editor" onSubmit={saveProjectDetails}>
@@ -2421,7 +2927,7 @@ export default function App() {
             {projectNotice && <p className="project-notice" role="status">{projectNotice}</p>}
             {projectError && <p className="form-error project-message" role="alert">{projectError}</p>}
             {workspaceSection === 'code' && !workspace.files.some((file) => file.path === 'main.py') && <p className="form-error project-message" role="status">루트 main.py가 없어 실행할 수 없어요. 왼쪽 + 버튼에서 파일 종류를 선택하고 <code>main.py</code>를 만들면 다시 실행할 수 있습니다.</p>}
-            {projectNeedsReload && <button className="reload-draft-button" type="button" onClick={reloadWorkspace} disabled={projectBusy || isProjectReadOnly}>서버의 최신 초안 불러오기</button>}
+            {projectNeedsReload && <button className="reload-draft-button" type="button" onClick={() => void reloadWorkspace()} disabled={projectBusy || isProjectReadOnly}>서버의 최신 초안 불러오기</button>}
             <nav className="workspace-section-nav" aria-label="프로젝트 작업 영역">
               <button type="button" className={workspaceSection === 'overview' ? 'is-active' : ''} aria-pressed={workspaceSection === 'overview'} onClick={() => setWorkspaceSection('overview')}><strong>개요</strong><span>프로젝트 소개와 진행 상황</span></button>
               <button type="button" className={workspaceSection === 'code' ? 'is-active' : ''} aria-pressed={workspaceSection === 'code'} onClick={() => setWorkspaceSection('code')}><strong>코드 편집</strong><span>파일 {workspace.files.length}개{projectDirty ? ' · 저장 안 됨' : ''}</span></button>
@@ -2439,30 +2945,56 @@ export default function App() {
                 <aside className="project-overview-meta"><span className="project-overview-live"><i /> {projectDirty ? '저장되지 않은 변경 사항' : '최신 초안'}</span><strong>초안 v{workspace.draft_version}</strong><span>마지막 업데이트 {new Date(workspace.updated_at).toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' })}</span><span>{localProjectDirectory ? `컴퓨터 폴더 · ${localProjectDirectory.name}` : 'WebLink 작업 공간에 저장 중'}</span></aside>
               </div>
               <div className="project-overview-stats" aria-label="프로젝트 요약">
-                <article><span>파일</span><strong>{workspace.files.length}</strong><small>프로젝트 코드와 문서</small></article>
-                <article><span>작업</span><strong>{projectTasks.length}</strong><small>{projectTasks.filter((task) => task.status === 'IN_PROGRESS').length}개 진행 중 · {completedTaskCount}개 완료</small></article>
-                <article><span>팀원</span><strong>{projectMembers.length}</strong><small>공유 작업 공간 참여자</small></article>
-                <article><span>저장 버전</span><strong>{projectVersions.length}</strong><small>{projectVersions.length ? `최근 v${projectVersions[0].version_number}` : '아직 저장한 버전 없음'}</small></article>
+                <button type="button" onClick={() => setWorkspaceSection('code')} aria-label={`파일 ${workspace.files.length}개, 코드 편집 열기`}><span>파일</span><strong>{workspace.files.length}</strong><small>프로젝트 코드와 문서 <b>열기 →</b></small></button>
+                <button type="button" onClick={() => setWorkspaceSection('tasks')} aria-label={`작업 ${projectTasks.length}개, 작업 보드 열기`}><span>작업</span><strong>{projectTasks.length}</strong><small>{projectTasks.filter((task) => task.status === 'IN_PROGRESS').length}개 진행 중 · {completedTaskCount}개 완료 <b>열기 →</b></small></button>
+                <button type="button" onClick={() => setWorkspaceSection('team')} aria-label={`팀원 ${projectMembers.length}명, 팀 관리 열기`}><span>팀원</span><strong>{projectMembers.length}</strong><small>공유 작업 공간 참여자 <b>열기 →</b></small></button>
+                <button type="button" onClick={() => setWorkspaceSection('storage')} aria-label={`저장 버전 ${projectVersions.length}개, 저장 위치 열기`}><span>저장 버전</span><strong>{projectVersions.length}</strong><small>{projectVersions.length ? `최근 v${projectVersions[0].version_number}` : '아직 저장한 버전 없음'} <b>열기 →</b></small></button>
               </div>
+              <div className="project-overview-content">
+              <section className="project-overview-progress" aria-label="작업 진행 상황">
+                <div className="project-overview-progress-summary"><div><p className="eyebrow">팀 진행 상황</p><strong>{projectTasks.length ? `${taskCompletionPercent}% 완료` : '작업 없음'}</strong><span>{projectTasks.length ? `${completedTaskCount} / ${projectTasks.length}개 작업` : '작업 보드에서 할 일을 추가할 수 있어요.'}</span></div><div className="project-overview-progress-track" role="progressbar" aria-label="작업 완료율" aria-valuemin={0} aria-valuemax={100} aria-valuenow={taskCompletionPercent}><span style={{ width: `${taskCompletionPercent}%` }} /></div><button type="button" onClick={() => setWorkspaceSection('tasks')}>{overdueTaskCount ? `기한 초과 ${overdueTaskCount}개` : projectTasks.length ? '작업 보드 열기' : '첫 작업 추가'} <b>→</b></button></div>
+                <div className="project-overview-deadlines"><div className="project-overview-panel-heading"><div><p className="eyebrow">가까운 일정</p><h3>마감 예정 작업</h3></div><button type="button" onClick={() => setWorkspaceSection('tasks')}>전체 보기 →</button></div>{dashboardDueTasks.length ? <ul>{dashboardDueTasks.map((task) => <li key={task.id}><button type="button" onClick={() => void openTaskInBoard(task.id)}><span className={task.due_date && task.due_date < todayForTasks ? 'is-overdue' : ''}>{task.due_date && task.due_date < todayForTasks ? '지남' : task.due_date && task.due_date === todayForTasks ? '오늘' : task.due_date ? new Date(`${task.due_date}T00:00:00`).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' }) : '마감 없음'}</span><strong>{task.title}</strong><small>{task.status === 'IN_PROGRESS' ? '진행 중' : '할 일'}</small></button></li>)}</ul> : <div className="project-overview-deadline-empty"><p className="project-overview-empty">{projectTasks.length && projectTasks.every((task) => task.status === 'DONE') ? '모든 작업을 완료했습니다.' : projectTasks.some((task) => task.status !== 'DONE') ? '미완료 작업에 아직 마감일이 설정되지 않았습니다.' : '작업 보드에 첫 할 일을 추가해 보세요.'}</p><button type="button" onClick={() => setWorkspaceSection('tasks')}>{projectTasks.some((task) => task.status !== 'DONE') ? '작업 보드에서 확인 →' : '작업 보드 열기 →'}</button></div>}</div>
+              </section>
               <section className="project-overview-readme" aria-labelledby="project-readme-title">
                 <div className="project-overview-panel-heading"><div><p className="eyebrow">프로젝트 문서</p><h3 id="project-readme-title">{projectReadmeFile ? 'README.md' : '프로젝트 소개 문서'}</h3></div>{projectReadmeFile ? <button type="button" onClick={() => { openProjectFile(projectReadmeFile.path); setWorkspaceSection('code') }}>README 편집 →</button> : !isProjectReadOnly && <button type="button" onClick={() => void openOrCreateProjectReadme()} disabled={projectBusy}>README 만들기 →</button>}</div>
                 {projectReadmeFile ? <ProjectReadmePreview content={projectReadmeFile.content} /> : <p className="project-overview-empty">README.md가 아직 없습니다. 프로젝트 목표, 실행 방법, 주요 파일을 적어 두면 처음 참여하는 팀원도 바로 흐름을 파악할 수 있어요. 만들기를 누르면 설명과 파일 목록을 넣은 초안이 준비됩니다.</p>}
               </section>
+              </div>
               <div className="project-overview-lower">
                 <section className="project-overview-panel project-overview-recent"><div className="project-overview-panel-heading"><div><p className="eyebrow">팀 진행 상황</p><h3>최근 활동</h3></div><button type="button" onClick={() => { setWorkspaceSection('tasks'); setTaskActivityOpen(true); markTaskActivityRead() }}>활동 모두 보기 →</button></div>
                   {projectTaskActivity.length ? <ol className="project-overview-activity">{projectTaskActivity.slice(0, 5).map((activity) => <li key={activity.id}><button type="button" onClick={() => void openTaskFromActivity(activity)}><span className={`project-overview-activity-dot${seenTaskActivityIds.includes(activity.id) ? '' : ' is-unread'}`} aria-hidden="true" /><span className="project-overview-activity-copy"><span><strong>{activity.actor_name}</strong> {activity.message}</span><b>{activity.task_title}</b></span><time>{new Date(activity.created_at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</time></button></li>)}</ol> : <p className="project-overview-empty">아직 팀 활동이 없어요. 작업을 추가하거나 진행 상태를 바꾸면 이곳에서 확인할 수 있습니다.</p>}
                 </section>
-                <section className="project-overview-panel project-overview-start"><p className="eyebrow">바로 시작하기</p><h3>다음 작업을 골라 보세요</h3><button type="button" onClick={() => setWorkspaceSection('code')}><span className="project-overview-action-icon">⌘</span><span><strong>코드 편집 열기</strong><small>프로젝트 파일을 확인하고 수정해요.</small></span><b>→</b></button><button type="button" onClick={() => setWorkspaceSection('tasks')}><span className="project-overview-action-icon">✓</span><span><strong>할 일 정리하기</strong><small>팀원과 작업을 나누고 진행 상황을 기록해요.</small></span><b>→</b></button><button type="button" onClick={() => setWorkspaceSection('storage')}><span className="project-overview-action-icon">⌂</span><span><strong>저장 위치 확인하기</strong><small>{localProjectDirectory ? '컴퓨터 폴더 연결 상태를 확인해요.' : 'GitHub Desktop 폴더를 연결할 수 있어요.'}</small></span><b>→</b></button></section>
+                <section className="project-overview-panel project-overview-start">
+                  {canManageProject ? <details className="project-setup-details">
+                    <summary className="project-setup-heading"><div><p className="eyebrow">프로젝트 준비</p><h3>팀과 시작하기</h3></div><span>{projectSetupSteps.filter((step) => step.done).length}/{projectSetupSteps.length} 완료</span></summary>
+                    <div className="project-setup-progress" role="progressbar" aria-label="프로젝트 시작 준비율" aria-valuemin={0} aria-valuemax={projectSetupSteps.length} aria-valuenow={projectSetupSteps.filter((step) => step.done).length}><span style={{ width: `${projectSetupSteps.filter((step) => step.done).length / projectSetupSteps.length * 100}%` }} /></div>
+                    <div className="project-setup-list">{projectSetupSteps.map((step) => <button key={step.id} type="button" className={step.done ? 'is-complete' : ''} onClick={step.action} disabled={projectBusy || (step.id === 'intro' && projectDirty)}><span className="project-setup-icon" aria-hidden="true">{step.done ? '✓' : step.icon}</span><span className="project-setup-copy"><strong>{step.title}</strong><small>{step.detail}</small></span><b>{step.done ? '완료' : '열기 →'}</b></button>)}</div>
+                  </details> : <><p className="eyebrow">바로 시작하기</p><h3>다음 작업을 골라 보세요</h3><button type="button" onClick={() => setWorkspaceSection('code')}><span className="project-overview-action-icon">⌘</span><span><strong>코드 편집 열기</strong><small>프로젝트 파일을 확인하고 수정해요.</small></span><b>→</b></button><button type="button" onClick={() => setWorkspaceSection('tasks')}><span className="project-overview-action-icon">✓</span><span><strong>할 일 확인하기</strong><small>팀원과 작업의 진행 상황을 확인해요.</small></span><b>→</b></button><button type="button" onClick={() => setWorkspaceSection('storage')}><span className="project-overview-action-icon">⌂</span><span><strong>저장 위치 확인하기</strong><small>{localProjectDirectory ? '컴퓨터 폴더 연결 상태를 확인해요.' : '저장된 프로젝트 파일을 확인해요.'}</small></span><b>→</b></button></>}
+                </section>
               </div>
             </section>
             <section className="project-collaborators-card" hidden={workspaceSection !== 'team'}>
-              <div className="project-collaborators-heading"><div><p className="eyebrow">함께 작업</p><h2>프로젝트 팀원</h2><p>팀원은 각자 WebLink 계정으로 같은 초안을 열어 이어서 작업할 수 있어요.</p></div><span>{projectMembers.length}명</span></div>
+              <div className="project-collaborators-heading"><div><p className="eyebrow">함께 작업</p><h2>프로젝트 팀원</h2><p>팀원은 각자 WebLink 계정으로 같은 초안을 열어 이어서 작업할 수 있어요.</p></div><span>{projectEventsConnected ? `현재 ${onlineProjectMemberIds.length}명 접속 · 팀원 ${projectMembers.length}명` : `팀원 ${projectMembers.length}명`}</span></div>
               {canManageProject && <form className="project-member-form" onSubmit={addProjectMember}>
                 <label>WebLink 계정 이메일<input type="email" value={memberEmail} onChange={(event) => setMemberEmail(event.target.value)} placeholder="친구의 가입 이메일" required maxLength={320} disabled={projectBusy} /></label>
                 <label>권한<select value={memberRole} onChange={(event) => setMemberRole(event.target.value as 'EDITOR' | 'VIEWER')} disabled={projectBusy}><option value="EDITOR">편집 가능</option><option value="VIEWER">보기 전용</option></select></label>
                 <button className="primary-button" type="submit" disabled={projectBusy || !memberEmail.trim()}>{projectBusy ? '처리 중…' : '팀원 추가'}</button>
                 <small>팀원이 되려면 먼저 WebLink에 가입해야 합니다. 이메일을 보내지는 않아요.</small>
               </form>}
+              {canManageProject && <div className="project-invite-tools"><button className="secondary-button" type="button" onClick={() => void createProjectInviteLink()} disabled={projectBusy || !memberEmail.trim()}>{projectBusy ? '처리 중…' : '초대 링크 만들기'}</button><small>이메일을 입력하면 해당 계정에 연결된 7일 유효 링크를 만들어요. 링크를 직접 전달하세요.</small>{projectInviteLink && <div className="project-invite-link"><input aria-label="프로젝트 초대 링크" readOnly value={projectInviteLink} onFocus={(event) => event.currentTarget.select()} /><button className="secondary-button" type="button" onClick={() => void navigator.clipboard.writeText(projectInviteLink).then(() => setProjectNotice('초대 링크를 클립보드에 복사했습니다.')).catch(() => setProjectError('클립보드 접근이 막혔습니다. 링크 입력란을 선택해 복사해 주세요.'))}>링크 복사</button></div>}</div>}
+              {canManageProject && <section className="project-invitation-list" aria-label="보낸 초대">
+                <div className="project-invitation-heading"><div><h3>보낸 초대</h3><p>초대 링크는 만든 뒤 7일 동안 사용할 수 있어요.</p></div><span>{projectInvitations.filter((item) => item.status === 'PENDING').length}개 대기 중</span></div>
+                {projectInvitations.length ? <ul>{projectInvitations.map((invitation) => {
+                  const expiry = new Date(invitation.expires_at)
+                  const daysLeft = Math.max(0, Math.ceil((expiry.getTime() - Date.now()) / 86_400_000))
+                  return <li key={invitation.id} className={invitation.status === 'EXPIRED' ? 'is-expired' : ''}>
+                    <span className="project-invitation-identity"><strong>{invitation.email}</strong><small>{invitation.role === 'EDITOR' ? '편집 권한' : '보기 전용'} · {invitation.status === 'EXPIRED' ? '만료됨' : `${daysLeft}일 후 만료`}</small></span>
+                    <time dateTime={invitation.expires_at}>만료 {expiry.toLocaleDateString('ko-KR')}</time>
+                    {invitation.status === 'EXPIRED' && <button type="button" className="secondary-button" onClick={() => void createProjectInviteLink(invitation.email, invitation.role)} disabled={projectBusy}>다시 초대</button>}
+                    <button type="button" className="plain-danger-button" onClick={() => void revokeProjectInvitation(invitation)} disabled={projectBusy}>{invitation.status === 'EXPIRED' ? '기록 삭제' : '초대 취소'}</button>
+                  </li>
+                })}</ul> : <p className="project-invitation-empty">아직 보낸 초대가 없어요.</p>}
+              </section>}
               {isProjectReadOnly && <p className="member-readonly-note">{projectAccessLost ? '이 계정은 현재 프로젝트에 접근할 수 없어 서버 변경을 확인하거나 저장할 수 없습니다. 저장되지 않은 코드는 복사해 보관하세요.' : '보기 전용 권한입니다. 파일을 내려받아 확인할 수 있지만 프로젝트를 수정하거나 실행할 수는 없어요.'}</p>}
               <div className="project-member-list">
                 {projectMembers.map((member) => <div className="project-member-row" key={member.user_id}>
@@ -2471,12 +3003,18 @@ export default function App() {
                   {canManageProject && member.role !== 'OWNER'
                     ? <select className={`project-member-role-select project-member-role-${member.role.toLocaleLowerCase()}`} value={member.role} onChange={(event) => void changeProjectMemberRole(member, event.target.value as 'EDITOR' | 'VIEWER')} disabled={projectBusy} aria-label={`${member.display_name}님의 권한 변경`}><option value="EDITOR">편집자</option><option value="VIEWER">보기 전용</option></select>
                     : <span className={`project-member-role project-member-role-${member.role.toLocaleLowerCase()}`}>{member.role === 'OWNER' ? '소유자' : member.role === 'EDITOR' ? '편집자' : '보기 전용'}</span>}
+                  {onlineProjectMemberIds.includes(member.user_id) && <span className="project-member-online"><i aria-hidden="true" />접속 중</span>}
                   {canManageProject && member.role !== 'OWNER' && <button type="button" className="plain-danger-button" onClick={() => void removeProjectMember(member)} disabled={projectBusy}>제외</button>}
                 </div>)}
               </div>
+              <section className="project-team-activity" aria-label="팀 변경 기록">
+                <div className="project-team-activity-heading"><div><h3>팀 변경 기록</h3><p>초대와 팀원 권한 변경 이력입니다.</p></div><span>최근 {projectTeamActivity.length}건</span></div>
+                {projectTeamActivity.length ? <ol>{projectTeamActivity.map((entry) => <li key={entry.id}><span><strong>{entry.actor_name}</strong>{entry.message}</span><time dateTime={entry.created_at}>{new Date(entry.created_at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</time></li>)}</ol> : <p className="project-team-activity-empty">아직 팀 변경 기록이 없습니다.</p>}
+              </section>
             </section>
             <section className="workspace-storage-card" hidden={workspaceSection !== 'storage'}>
               <div className="workspace-storage-summary"><div><p className="eyebrow">프로젝트 파일 저장 위치</p><h2>{localProjectDirectory ? `내 컴퓨터 · ${localProjectDirectory.name}` : 'WebLink 작업 공간'}</h2><p>{localProjectDirectory ? '초안을 저장하면 선택한 폴더에도 파일이 기록됩니다. GitHub Desktop에서 커밋·푸시해 친구와 공유할 수 있어요.' : '파일은 WebLink 작업 공간에 저장 중입니다. 내 컴퓨터나 GitHub Desktop 폴더를 연결해 코드 사본을 직접 관리할 수 있어요.'}</p></div><span className={`storage-state ${localProjectDirectory ? 'storage-state-local' : ''}`}>{localProjectDirectory ? '폴더 연결됨' : 'WebLink 저장'}</span></div>
+              {githubSource?.connected && <div className="github-source-panel"><div><p className="eyebrow">가져온 GitHub 원본</p><h3><a href={githubSource.repository_url ?? '#'} target="_blank" rel="noreferrer">{githubSource.repository_url?.replace('https://github.com/', '')}</a></h3><p>브랜치 <strong>{githubSource.branch}</strong>{githubSource.is_private ? ' · 비공개 저장소' : ' · 공개 저장소'} · 가져온 커밋 <code>{githubSource.imported_sha?.slice(0, 7)}</code></p></div><div className="github-source-actions"><span className={`github-source-state${githubSource.update_available ? ' is-ahead' : ''}`}>{githubSource.status_message ?? (githubSource.latest_sha === null ? 'GitHub 연결 필요' : githubSource.update_available ? '새 변경 있음' : '최신 상태')}</span><button className="secondary-button" type="button" onClick={() => void refreshGitHubSource()} disabled={projectBusy}>{projectBusy ? '확인 중…' : 'GitHub 변경 확인'}</button>{githubSource.update_available && <button className="primary-button" type="button" onClick={() => void pullGitHubSourceUpdates()} disabled={projectBusy || projectDirty || projectNeedsReload || isProjectReadOnly}>{isProjectReadOnly ? '보기 전용' : projectDirty ? '먼저 초안 저장' : projectNeedsReload ? '최신 초안 먼저 확인' : '변경 가져오기'}</button>}{(githubSource.status_message || (githubSource.is_private && !githubSource.token_connected)) && <button className="plain-link-button" type="button" onClick={showConnections} disabled={projectBusy}>GitHub 권한 연결</button>}</div><small>변경을 받으면 현재 초안은 저장 버전으로 백업합니다. 이 컴퓨터 폴더는 자동으로 변경하지 않습니다.</small></div>}
               {!localProjectDirectory ? <button className="secondary-button" type="button" onClick={chooseLocalProjectDirectory} disabled={projectBusy}>내 컴퓨터 / GitHub Desktop 폴더 연결</button> : <div className="workspace-storage-actions"><button className="secondary-button" type="button" onClick={refreshProjectFromLocalDirectory} disabled={projectBusy || projectDirty || isProjectReadOnly}>폴더에서 최신 파일 가져오기</button><button className="secondary-button" type="button" onClick={syncWorkspaceToLocalDirectory} disabled={projectBusy || projectDirty}>WebLink 파일을 폴더에 저장</button><button className="plain-danger-button" type="button" onClick={disconnectLocalProjectDirectory} disabled={projectBusy}>연결 해제</button></div>}
               {pendingProjectDirectory && <div className="folder-connection-choice"><strong>선택한 폴더: {pendingProjectDirectory.name}</strong><p>전용 프로젝트 폴더를 선택한 뒤 한 방향을 고르세요. 가져오기는 현재 WebLink 초안을 교체하고, 폴더에 복사하기는 같은 경로의 파일을 덮어씁니다. 비밀 파일은 제외됩니다.</p><div><button className="secondary-button" type="button" onClick={importLocalProjectDirectory} disabled={projectBusy || isProjectReadOnly}>폴더에서 WebLink로 가져오기</button><button className="primary-button" type="button" onClick={exportProjectToLocalDirectory} disabled={projectBusy}>WebLink 파일을 폴더에 복사</button><button className="plain-danger-button" type="button" onClick={() => setPendingProjectDirectory(null)} disabled={projectBusy}>취소</button></div></div>}
               <small className="workspace-storage-footnote">이 브라우저는 폴더 연결을 이 컴퓨터에만 기억합니다. 친구는 저장소를 자신의 컴퓨터에 복제한 다음 같은 방식으로 폴더를 연결해야 해요. 동기화는 자동으로 GitHub에 올리지 않으므로 GitHub Desktop에서 커밋하고 푸시하세요.</small>
@@ -2568,7 +3106,7 @@ export default function App() {
             </section>}
             <div className="workspace-grid" hidden={workspaceSection !== 'code'}>
               <aside className="file-panel">
-                <div className="file-panel-heading"><p className="panel-label">파일 탐색기</p><button type="button" className="file-add-button" onClick={() => { setNewEntryPath(''); setNewEntryKind('auto'); setShowNewEntryForm((current) => !current) }} disabled={projectBusy || isProjectReadOnly} aria-label="새 파일 또는 폴더 만들기" title="새 파일 또는 폴더 만들기">＋</button></div>
+                <div className="file-panel-heading"><p className="panel-label">파일 탐색기</p><button type="button" className="file-drive-import-button" onClick={() => void addGoogleDriveFilesToProject()} disabled={projectBusy || isProjectReadOnly}>Drive에서 추가</button><button type="button" className="file-add-button" onClick={() => { setNewEntryPath(''); setNewEntryKind('auto'); setShowNewEntryForm((current) => !current) }} disabled={projectBusy || isProjectReadOnly} aria-label="새 파일 또는 폴더 만들기" title="새 파일 또는 폴더 만들기">＋</button></div>
                 <ProjectFileTree tree={projectFileTree} selectedPath={selectedPath} busy={projectBusy || isProjectReadOnly} onOpen={openProjectFile} onRename={(path) => void renameProjectFile(path)} onDelete={(path) => void deleteProjectFile(path)} onRenameFolder={(path) => void renameProjectFolder(path)} onDeleteFolder={(path) => void deleteProjectFolder(path)} onMoveFile={(path, folder) => void moveProjectFileToFolder(path, folder)} onImportFiles={(items, folder) => void importDroppedFiles(items, folder)} />
                 {showNewEntryForm && <form className="new-entry-form" onSubmit={createProjectEntry}>
                   <label>파일 또는 폴더 경로<input autoFocus value={newEntryPath} onChange={(event) => setNewEntryPath(event.target.value)} placeholder="예: src/main.py 또는 src" required maxLength={240} /></label>

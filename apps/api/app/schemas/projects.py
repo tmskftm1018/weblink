@@ -45,9 +45,35 @@ class ProjectFileInput(BaseModel):
         return normalized
 
 
+class ProjectFileImportRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    file: ProjectFileInput
+
+
+class ProjectFilesImportRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    files: list[ProjectFileInput] = Field(min_length=1, max_length=50)
+
+
 class SaveDraftRequest(BaseModel):
     expected_version: int = Field(ge=0)
     files: list[ProjectFileInput] = Field(min_length=1, max_length=50)
+
+
+class ProjectGitHubSourceResponse(BaseModel):
+    connected: bool
+    token_connected: bool = False
+    status_message: str | None = None
+    repository_url: str | None = None
+    branch: str | None = None
+    is_private: bool = False
+    imported_sha: str | None = None
+    latest_sha: str | None = None
+    update_available: bool = False
+
+
+class ProjectGitHubPullRequest(BaseModel):
+    expected_draft_version: int = Field(ge=0)
 
 
 class ProjectFileResponse(BaseModel):
@@ -79,6 +105,12 @@ class ProjectWorkspaceResponse(ProjectSummaryResponse):
     revisions: list[ProjectRevisionResponse]
 
 
+class ProjectGitHubPullResponse(BaseModel):
+    workspace: ProjectWorkspaceResponse
+    imported_sha: str
+    backup_version_name: str | None = None
+
+
 class DraftSavedResponse(BaseModel):
     project_id: UUID
     draft_version: int
@@ -105,6 +137,47 @@ class ProjectMemberAddRequest(BaseModel):
 
 class ProjectMemberRoleUpdateRequest(BaseModel):
     role: Literal['EDITOR', 'VIEWER']
+
+
+class ProjectInvitationCreateRequest(ProjectMemberAddRequest):
+    pass
+
+
+class ProjectInvitationCreateResponse(BaseModel):
+    token: str
+    email: str
+    project_name: str
+    expires_at: datetime
+    email_status: Literal['sent', 'not_configured', 'failed'] = 'not_configured'
+
+
+class ProjectInvitationResponse(BaseModel):
+    id: UUID
+    email: str
+    role: Literal['EDITOR', 'VIEWER']
+    expires_at: datetime
+    created_at: datetime
+    status: Literal['PENDING', 'EXPIRED']
+
+
+class ProjectInvitationAcceptRequest(BaseModel):
+    token: str = Field(min_length=32, max_length=200)
+
+
+class ProjectInvitationAcceptResponse(BaseModel):
+    project_id: UUID
+    project_name: str
+
+
+class ProjectTeamActivityResponse(BaseModel):
+    id: UUID
+    project_id: UUID
+    actor_id: UUID | None
+    actor_name: str
+    message: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProjectMemberResponse(BaseModel):
