@@ -106,6 +106,8 @@ class LearningEnrollment(Base):
     project_id: Mapped[UUID | None] = mapped_column(ForeignKey("projects.id", ondelete="SET NULL"), index=True)
     status: Mapped[str] = mapped_column(String(16), default="ACTIVE", server_default="ACTIVE", nullable=False)
     current_node_id: Mapped[str | None] = mapped_column(String(40))
+    path_preferences: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    path_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
     active_bridge_id: Mapped[str | None] = mapped_column(String(40))
     return_mission_id: Mapped[str | None] = mapped_column(String(40))
     last_revision_id: Mapped[UUID | None] = mapped_column(

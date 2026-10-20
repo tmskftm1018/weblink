@@ -89,6 +89,14 @@ ROLE_ANSWERS = {"ui_role": "입력을 받고 결과를 보여 준다", "api_role
 DIAGNOSTIC_ANSWERS = {"diagnostic_input": "입력", "diagnostic_validation": "빈 제목을 거부한다", "diagnostic_storage": "데이터를 저장하고 다시 읽는다"}
 
 
+def diagnostic_recommendation(answers: dict[str, str]) -> dict:
+    missed = [key for key, answer in DIAGNOSTIC_ANSWERS.items() if answers.get(key) != answer]
+    return {
+        "foundation_ids": ["C00", "C02", "C04"] if missed else [],
+        "message": "입력·조건·함수 설명부터 살펴보세요. 진단 결과는 완료 판정에 감점하지 않아요." if missed else "핵심 흐름을 알고 있어요. 필요한 설명만 골라 보고 같은 미션을 진행하세요.",
+    }
+
+
 def fields_for(node: dict) -> list[dict]:
     return FIELD_MAP.get(node["id"], [
         {"id": "prediction", "label": node["prediction"], "kind": "text", "min_length": 4},
@@ -122,11 +130,7 @@ def evaluate(node: dict, answers: dict[str, str], *, reopened: bool) -> dict:
         if any(not check["passed"] for check in checks):
             issues["source"] = "HTML 구조 검사에서 확인할 항목이 있어요. 아래 항목별 안내를 살펴보세요."
     if node["id"] == "M01":
-        missed = [key for key, answer in DIAGNOSTIC_ANSWERS.items() if answers.get(key) != answer]
-        recommendation = {
-            "foundation_ids": ["C00", "C02", "C04"] if missed else [],
-            "message": "입력·조건·함수 설명부터 살펴보세요. 진단 결과는 완료 판정에 감점하지 않아요." if missed else "핵심 흐름을 알고 있어요. 필요한 설명만 골라 보고 같은 미션을 진행하세요.",
-        }
+        recommendation = diagnostic_recommendation(answers)
     return {
         "passed": not issues,
         "issues": issues,

@@ -14,6 +14,7 @@ from app.schemas.learning import (
     LearningEnrollmentCreateRequest,
     LearningEnrollmentResponse,
     LearningJourneyUpdateRequest,
+    LearningPathSaveRequest,
     LearningProjectLinkRequest,
     LearningProjectRequest,
     LearningProjectSyncRequest,
@@ -28,6 +29,7 @@ from app.services import learning as learning_service
 from app.services import learning_curriculum as curriculum_service
 from app.services import learning_execution, learning_handoff, learning_project_sync
 from app.services import learning_work as work_service
+from app.services import learning_path as path_service
 
 router = APIRouter(prefix="/learning", tags=["learning"])
 SessionDep = Annotated[Session, Depends(get_db)]
@@ -109,6 +111,16 @@ def get_enrollment(enrollment_id: UUID, db: SessionDep, user: CurrentUser) -> Le
 @router.get("/enrollments/{enrollment_id}/workspace")
 def learning_workspace(enrollment_id: UUID, db: SessionDep, user: CurrentUser) -> dict:
     return work_service.workspace(db, user, enrollment_id)
+
+
+@router.get("/enrollments/{enrollment_id}/path")
+def learning_path(enrollment_id: UUID, db: SessionDep, user: CurrentUser) -> dict:
+    return path_service.get_path(db, user, enrollment_id)
+
+
+@router.put("/enrollments/{enrollment_id}/path")
+def save_learning_path(enrollment_id: UUID, payload: LearningPathSaveRequest, db: SessionDep, user: CurrentUser) -> dict:
+    return path_service.save_path(db, user, enrollment_id, payload)
 
 
 @router.get("/enrollments/{enrollment_id}/portfolio")

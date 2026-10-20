@@ -35,6 +35,7 @@ export default function RuntimeCodeExercise({ value, starter, path, language, sc
   const [running, setRunning] = useState(false)
   const [error, setError] = useState('')
   const [selectedJob, setSelectedJob] = useState('')
+  const [resultHidden, setResultHidden] = useState(false)
   const selected = history.find(item => item.id === selectedJob) ?? history[0]
   const controller = useRef<AbortController | null>(null)
   useEffect(() => () => controller.current?.abort(), [])
@@ -45,7 +46,7 @@ export default function RuntimeCodeExercise({ value, starter, path, language, sc
     <div className="learning-html-exercise__editor"><Suspense fallback={<p>코드 편집기를 불러오는 중…</p>}><Editor path={path} value={value} readOnly={disabled || running} onChange={onChange} /></Suspense></div>
     <div className="learning-html-exercise__toolbar"><span>{value.length.toLocaleString()} / 32,000자</span><button type="button" disabled={disabled || running || value.length > 32000} onClick={async () => {
       const active = new AbortController(); controller.current = active
-      setRunning(true); setError('')
+      setRunning(true); setError(''); setResultHidden(false)
       try { const result = await onRun(active.signal); if (!active.signal.aborted) { setReport(result); setRanSource(value); setRanRevision(revisionTag) } }
       catch (cause) { if (!active.signal.aborted) setError(cause instanceof Error ? cause.message : '실행 결과를 받지 못했어요.') }
       finally { if (!active.signal.aborted) setRunning(false) }
@@ -57,13 +58,15 @@ export default function RuntimeCodeExercise({ value, starter, path, language, sc
     {history.length > 0 && <div className="learning-html-exercise__toolbar"><label>저장된 실행 기록<select value={selected?.id ?? ''} disabled={disabled || running} onChange={event => setSelectedJob(event.target.value)}>{history.map(item => <option key={item.id} value={item.id}>v{item.work_version} · {statuses[item.status] ?? item.status} · {item.is_current ? '현재 저장본' : '이전 저장본'} · {new Date(item.created_at).toLocaleString('ko-KR')}</option>)}</select></label><button disabled={disabled || running || !selected} type="button" onClick={async () => {
       if (!selected) return
       const active = new AbortController(); controller.current = active
-      setRunning(true); setError('')
+      setRunning(true); setError(''); setResultHidden(false)
       try { const result = await onRestore(selected.id, active.signal); if (!active.signal.aborted) { setReport(result); setRanRevision(selected.is_current ? savedRevisionTag : ''); setRanSource(selected.is_current && savedRevisionTag === revisionTag ? value : '') } }
       catch (cause) { if (!active.signal.aborted) setError(cause instanceof Error ? cause.message : '실행 기록을 읽지 못했어요.') }
       finally { if (!active.signal.aborted) setRunning(false) }
     }}>선택한 결과 다시 열기 · 새 실행 없음</button></div>}
     {error && <p role="alert">{error}</p>}
-    {report && <section className="learning-js-report" aria-live="polite">
+    {report && resultHidden && <button type="button" onClick={() => setResultHidden(false)}>마지막 실행 결과 다시 펼치기 · 새 실행 없음</button>}
+    {report && !resultHidden && <section className="learning-js-report" aria-live="polite">
+      <button type="button" className="learning-result-close" onClick={() => setResultHidden(true)}>실행 결과 닫기</button>
       <h4>{statuses[report.status] ?? report.status} · 저장본 v{report.work_version}</h4>
       <p>{report.scope}</p>
       {(value !== ranSource || ranRevision !== revisionTag) && <p>코드 또는 함께 저장하는 답안이 바뀌었어요. 아래는 이전 저장본의 결과이며 다시 실행해 확인할 수 있어요.</p>}

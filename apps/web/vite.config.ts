@@ -8,7 +8,7 @@ export default defineConfig(({ mode }) => {
     server: {
       host: '0.0.0.0',
       proxy: {
-        '/api': { target: env.API_PROXY_TARGET || 'http://localhost:8000', changeOrigin: true },
+        '/api': { target: env.API_PROXY_TARGET || 'http://localhost:8000', changeOrigin: true, ws: true },
       },
     },
   }

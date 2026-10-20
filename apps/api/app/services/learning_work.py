@@ -104,6 +104,7 @@ def portfolio(db: Session, user: User, enrollment_id: UUID) -> dict:
         "format": "weblink-learning-portfolio-v1", "course_id": enrollment.course_key,
         "content_version": enrollment.content_version, "rubric_version": enrollment.rubric_version,
         "completed_ids": sorted(completed), "course_completed": all(node["id"] in completed for node in catalogue["missions"]),
+        "learning_path": {"version": enrollment.path_version, **(enrollment.path_preferences or {})},
         "scope": "서버에 저장한 답안과 해당 답안 해시의 실행 기록입니다. 인증서나 브라우저 E2E 검증 결과가 아닙니다. 이 파일을 자동으로 복원하거나 새 프로젝트에 등록하지는 않습니다.",
         "project_exports": [{"node_id": item.node_id, "field": item.field,
                              "project_id": str(item.project_id) if item.project_id else None,

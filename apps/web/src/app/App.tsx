@@ -3,7 +3,7 @@ import { authService, User } from '../services/auth'
 import { sessionExpiredEvent } from '../services/session'
 import { AttemptResult, Course, Lesson, ProjectJump, learningService } from '../services/learning'
 import { connectionService, GitHubConnectionStatus, GoogleConnectionStatus, GoogleSheetValues } from '../services/connections'
-import { ManagedProjectInvitation, ProjectGitHubSource, ProjectMember, ProjectSummary, ProjectTask, ProjectTaskActivity, TaskChecklistItem, ProjectTaskPriority, ProjectTaskStatus, ProjectTeamActivity, ProjectVersion, ProjectVersionDetails, ProjectWorkspace, TaskDiscussion, projectService } from '../services/projects'
+import { ManagedProjectInvitation, ProjectRequestError, ProjectFile, ProjectGitHubSource, ProjectMember, ProjectSummary, ProjectTask, ProjectTaskActivity, TaskChecklistItem, ProjectTaskPriority, ProjectTaskStatus, ProjectTeamActivity, ProjectVersion, ProjectVersionDetails, ProjectWorkspace, TaskDiscussion, projectService } from '../services/projects'
 import { bindProjectDirectory, chooseProjectDirectory, getProjectDirectory, moveProjectFileInDirectory, moveProjectFilesInDirectory, ProjectDirectory, readProjectDirectory, removeEmptyProjectDirectoryFromDirectory, removeProjectFileFromDirectory, unbindProjectDirectory, writeProjectDirectory } from '../services/localProjects'
 import { readDroppedProjectItems } from '../services/projectDropImport'
 import { pickGoogleDriveFiles } from '../services/googleDrivePicker'
@@ -12,6 +12,17 @@ import ProjectReadmePreview from './ProjectReadmePreview'
 import LandingPage from './LandingPage'
 import BlockExercise from './BlockExercise'
 import LearningStudio from './LearningStudio'
+import ProjectDraftRecovery from './ProjectDraftRecovery'
+import useProjectDraftRecovery from './useProjectDraftRecovery'
+import { BrowserDraft, parseBrowserDraft, readBrowserDraft } from '../services/browserDrafts'
+import { fileContents, sameFiles, projectRecoveryKey, validateRecoveryFiles } from '../services/projectRecovery'
+import { readProjectView } from '../services/projectView'
+import useProjectView from './useProjectView'
+import useProjectRuns, { projectRunLabels, projectRunTime } from './useProjectRuns'
+import ProjectRunHistory from './ProjectRunHistory'
+import ProjectSearch from './ProjectSearch'
+import ProjectChangeReview from './ProjectChangeReview'
+import { ProjectSearchHit, ProjectSearchMode } from '../services/projectSearch'
 
 type Mode = 'login' | 'signup'
 type View = 'lesson' | 'projects' | 'workspace' | 'connections'
@@ -106,6 +117,8 @@ export default function App() {
   const [assembledBlocks, setAssembledBlocks] = useState<string[]>([])
   const [view, setView] = useState<View>('lesson')
   const [learningMode, setLearningMode] = useState<'studio' | 'legacy'>('studio')
+  const [learningHomePage, setLearningHomePage] = useState<'home' | 'records'>('home')
+  const [legacyTarget, setLegacyTarget] = useState<{ course?: string; lesson?: string }>({})
   const learningLeaveRef = useRef<(() => Promise<boolean>) | null>(null)
   const [googleConnection, setGoogleConnection] = useState<GoogleConnectionStatus | null>(null)
   const [githubConnection, setGithubConnection] = useState<GitHubConnectionStatus | null>(null)
@@ -173,7 +186,11 @@ export default function App() {
   const [projectVersions, setProjectVersions] = useState<ProjectVersion[]>([])
   const [versionPreview, setVersionPreview] = useState<ProjectVersionDetails | null>(null)
   const [selectedPath, setSelectedPath] = useState('')
-  const [editorJump, setEditorJump] = useState<{ path: string; line: number } | null>(null)
+  const [editorJump, setEditorJump] = useState<{ path: string; line: number; column?: number; focus?: boolean; requestId?: number } | null>(null)
+  const editorNavigation = useRef(0)
+  const editorPanel = useRef<HTMLDivElement>(null)
+  const [projectSearchMode, setProjectSearchMode] = useState<ProjectSearchMode | null>(null)
+  const [projectSearchFocus, setProjectSearchFocus] = useState(0)
   const [openFilePaths, setOpenFilePaths] = useState<string[]>([])
   const [newProjectName, setNewProjectName] = useState('')
   const [newProjectDescription, setNewProjectDescription] = useState('')
@@ -186,7 +203,14 @@ export default function App() {
   const [projectAccessLost, setProjectAccessLost] = useState(false)
   const [projectNotice, setProjectNotice] = useState('')
   const [projectError, setProjectError] = useState('')
+  const projectRecovery = useProjectDraftRecovery(user?.id, workspace, projectDirty)
   const [runResult, setRunResult] = useState<Awaited<ReturnType<typeof projectService.getRun>> | null>(null)
+  const [runOutputHidden, setRunOutputHidden] = useState(false)
+  const projectRuns = useProjectRuns(view === 'workspace' && !sessionExpired ? workspace?.id : undefined, user?.id, runResult, setRunResult)
+  const runRequest = useRef<{ projectId: string; revisionId: string; key: string } | null>(null)
+  const runSnapshot = useRef<{ runId: string; files: string } | null>(null)
+  const projectEntryJump = useRef<string | null>(null)
+  const projectView = useProjectView(user?.id, workspace?.id, view === 'workspace' && !sessionExpired, projectBusy, workspaceSection, openFilePaths, selectedPath, workspace?.files.map(file => file.path) ?? [])
   const [debugHypothesis, setDebugHypothesis] = useState('')
   const [expectedOutput, setExpectedOutput] = useState('')
   const [debugSaved, setDebugSaved] = useState(false)
@@ -208,11 +232,19 @@ export default function App() {
         ? left.name.localeCompare(right.name, 'ko')
         : new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime())
   }, [projects, projectSearch, projectRoleFilter, projectSort])
+  const cachedProjectIds = useMemo(() => new Set(view === 'projects' && user
+    ? projects.filter(project => readBrowserDraft(projectRecoveryKey(user.id, project.id))).map(project => project.id)
+    : []), [projects, user?.id, view])
   const projectFileTree = useMemo(() => buildProjectFileTree(workspace?.files ?? []), [workspace?.files])
+  const projectSearchFiles = useMemo(() => workspace?.files.filter(file => file.path !== '.gitkeep' && !file.path.endsWith('/.gitkeep')) ?? [], [workspace?.files])
   const projectReadmeFile = workspace?.files.find((file) => file.path.toLocaleLowerCase() === 'readme.md')
   const currentProjectRole = projectMembers.find((member) => member.user_id === user?.id)?.role ?? 'VIEWER'
   const canManageProject = currentProjectRole === 'OWNER' && !projectAccessLost
   const isProjectReadOnly = currentProjectRole === 'VIEWER' || projectAccessLost
+  const activeProjectRun = runResult?.project_id === workspace?.id ? runResult : null
+  const projectRunPending = Boolean(activeProjectRun && (activeProjectRun.status === 'QUEUED' || activeProjectRun.status === 'RUNNING'))
+  const projectDraftSnapshot = workspace && projectDirty ? projectRecovery.snapshot(workspace) : null
+  const projectChangedPaths = new Set(projectDirty && projectDraftSnapshot?.baseAnswers ? workspace?.files.filter(file => !Object.prototype.hasOwnProperty.call(projectDraftSnapshot.baseAnswers, file.path) || projectDraftSnapshot.baseAnswers![file.path] !== file.content).map(file => file.path) : [])
   const blockPalette = useMemo(() => {
     const blocks = lesson?.content.block_activity?.blocks ?? []
     const shuffled = [...blocks]
@@ -251,6 +283,8 @@ export default function App() {
   useEffect(() => {
     authService.me().then(setUser).catch(() => setUser(null)).finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => { setRunOutputHidden(false) }, [runResult?.id])
 
   useEffect(() => {
     function requireLogin() {
@@ -333,7 +367,7 @@ export default function App() {
               : active)
           }
           setProjectNeedsReload(true)
-          setProjectNotice('팀원이 최신 초안을 저장했습니다. 내 저장되지 않은 수정은 최신 초안을 불러올 때 사라지니, 필요한 코드는 먼저 복사해 보관해 주세요.')
+          setProjectNotice('팀원이 최신 초안을 저장했습니다. 내 수정과 서버 변경을 비교해 합치거나, 수정본을 내려받아 보관할 수 있어요.')
           return
         }
         const latestVersions = await projectService.listVersions(projectId)
@@ -343,7 +377,7 @@ export default function App() {
         if (projectDirtyRef.current || projectBusyRef.current || latest.draft_version <= currentAfterFetch.draft_version) {
           if (latest.draft_version > currentAfterFetch.draft_version) {
             setProjectNeedsReload(true)
-            setProjectNotice('팀원이 최신 초안을 저장했습니다. 내 저장되지 않은 수정은 최신 초안을 불러올 때 사라지니, 필요한 코드는 먼저 복사해 보관해 주세요.')
+            setProjectNotice('팀원이 최신 초안을 저장했습니다. 내 수정과 서버 변경을 비교해 합치거나, 수정본을 내려받아 보관할 수 있어요.')
           }
           return
         }
@@ -383,8 +417,9 @@ export default function App() {
     let pingTimer = 0
     const connectToProjectEvents = () => {
       if (cancelled) return
-      const socketUrl = `${apiBaseUrl.replace(/\/+$/, '').replace(/^http/, 'ws')}/api/v1/projects/${projectId}/events`
-      socket = new WebSocket(socketUrl)
+      const socketUrl = new URL(`${apiBaseUrl.replace(/\/+$/, '')}/api/v1/projects/${projectId}/events`, window.location.origin)
+      socketUrl.protocol = socketUrl.protocol === 'https:' ? 'wss:' : 'ws:'
+      socket = new WebSocket(socketUrl.href)
       socket.onopen = () => {
         setProjectEventsConnected(true)
         window.clearTimeout(reconnectTimer)
@@ -434,14 +469,21 @@ export default function App() {
     : '', [workspace])
 
   useEffect(() => {
-    if (view !== 'workspace' || !workspace || !projectDirty || projectBusy || projectNeedsReload || isProjectReadOnly) return
+    if (view !== 'workspace' || !workspace || !projectDirty || projectBusy || projectNeedsReload || isProjectReadOnly || !projectRecovery.checked || projectRecovery.pending || projectRecovery.paused) return
     if (autoSaveAttemptRef.current === autoSaveSignature) return
     const timer = window.setTimeout(() => {
       autoSaveAttemptRef.current = autoSaveSignature
       void saveProjectDraft()
     }, 1_500)
     return () => window.clearTimeout(timer)
-  }, [view, workspace, projectDirty, projectBusy, projectNeedsReload, isProjectReadOnly, autoSaveSignature, saveProjectDraft])
+  }, [view, workspace, projectDirty, projectBusy, projectNeedsReload, isProjectReadOnly, autoSaveSignature, saveProjectDraft, projectRecovery.checked, projectRecovery.pending, projectRecovery.paused])
+
+  useEffect(() => {
+    if (!projectDirty) return
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [projectDirty])
 
   useEffect(() => {
     const projectId = workspace?.id
@@ -519,7 +561,9 @@ export default function App() {
   }, [view, workspace?.id, user?.id, taskActivityOpen])
 
   useEffect(() => {
-    setWorkspaceSection(editorJump ? 'code' : 'overview')
+    setWorkspaceSection(projectEntryJump.current && projectEntryJump.current === workspace?.id ? 'code' : 'overview')
+    projectEntryJump.current = null
+    setProjectSearchMode(null)
     setOpenTaskDiscussionId(null)
     setTaskDiscussions({})
     setTaskChecklists({})
@@ -543,9 +587,16 @@ export default function App() {
   useEffect(() => {
     function handleEditorShortcut(event: KeyboardEvent) {
       const target = event.target
-      if (!(target instanceof HTMLElement) || !target.closest('.monaco-editor')) return
       const modifier = event.ctrlKey || event.metaKey
-      if (!modifier || view !== 'workspace' || !workspace) return
+      if (!modifier || view !== 'workspace' || !workspace || sessionExpired || event.isComposing || document.querySelector('dialog[open]')) return
+      const key = event.key.toLowerCase()
+      if ((key === 'p' && !event.shiftKey && !event.altKey) || (key === 'f' && event.shiftKey && !event.altKey)) {
+        event.preventDefault(); event.stopPropagation()
+        if (!projectBusy) openProjectSearch(key === 'p' ? 'files' : 'content')
+        return
+      }
+      if (!(target instanceof HTMLElement) || !target.closest('.monaco-editor')) return
+      if (target.closest('.monaco-diff-editor') && key !== 's') return
       if (event.key.toLocaleLowerCase() === 's') {
         event.preventDefault()
         event.stopPropagation()
@@ -562,18 +613,22 @@ export default function App() {
     }
     window.addEventListener('keydown', handleEditorShortcut, true)
     return () => window.removeEventListener('keydown', handleEditorShortcut, true)
-  }, [view, workspace, projectBusy, projectDirty, selectedPath, openFilePaths, saveProjectDraft, runProject])
+  }, [view, workspace, projectBusy, projectDirty, selectedPath, openFilePaths, saveProjectDraft, runProject, sessionExpired])
 
   useEffect(() => {
     if (!user || learningMode !== 'legacy') return
     let cancelled = false
     setLessonLoading(true)
+    setError('')
+    setLesson(null)
+    setAttemptResult(null)
+    setAssembledBlocks([])
     learningService.courses()
       .then(async (loadedCourses) => {
         if (cancelled) return
         setCourses(loadedCourses)
-        const firstCourse = loadedCourses.find((item) => item.lessons.some((entry) => entry.status !== 'COMPLETED')) ?? loadedCourses[0]
-        const firstLesson = firstCourse?.lessons.find((item) => item.status !== 'COMPLETED') ?? firstCourse?.lessons[0]
+        const firstCourse = loadedCourses.find(item => item.slug === legacyTarget.course) ?? loadedCourses.find((item) => item.lessons.some((entry) => entry.status !== 'COMPLETED')) ?? loadedCourses[0]
+        const firstLesson = firstCourse?.lessons.find(item => item.slug === legacyTarget.lesson) ?? firstCourse?.lessons.find((item) => item.status !== 'COMPLETED') ?? firstCourse?.lessons[0]
         setCourse(firstCourse ?? null)
         if (!firstCourse || !firstLesson) return
         const lessonDetails = await learningService.lesson(firstCourse.slug, firstLesson.slug)
@@ -584,7 +639,7 @@ export default function App() {
       })
       .finally(() => { if (!cancelled) setLessonLoading(false) })
     return () => { cancelled = true }
-  }, [user, learningMode])
+  }, [user, learningMode, legacyTarget])
 
   useEffect(() => {
     let cancelled = false
@@ -626,10 +681,25 @@ export default function App() {
   }
 
   async function handleLogout() {
+    if (projectBusy) return
+    projectView.flush()
     if (learningLeaveRef.current && !await learningLeaveRef.current()) return
-    await authService.logout()
+    setProjectBusy(true)
+    try {
+      if (workspace && projectDirty) {
+        if (isProjectReadOnly || projectNeedsReload) throw new Error('저장 전 수정이 남아 있어요. 수정본을 내려받거나 서버 파일과 비교한 뒤 로그아웃해 주세요.')
+        await persistWorkspaceDraft(workspace)
+      }
+      await authService.logout()
+    } catch (cause) {
+      setProjectError(cause instanceof Error ? cause.message : '로그아웃하지 못했어요. 작성 내용은 그대로 유지됩니다.')
+      return
+    } finally { setProjectBusy(false) }
     setUser(null)
     setMode('login')
+    setLearningMode('studio')
+    setLearningHomePage('home')
+    setLegacyTarget({})
     setCourses([])
     setCourse(null)
     setLesson(null)
@@ -653,6 +723,8 @@ export default function App() {
   }
 
   async function showProjects() {
+    if (projectBusy) return
+    projectView.flush()
     if (learningLeaveRef.current && !await learningLeaveRef.current()) return
     if (view === 'workspace' && projectDirty && workspace) {
       if (projectAccessLost) {
@@ -669,6 +741,12 @@ export default function App() {
         }
       }
     }
+    await loadProjectList()
+  }
+
+  async function loadProjectList() {
+    setProjectDirty(false)
+    setProjectNeedsReload(false)
     setView('projects')
     setWorkspace(null)
     setProjectMembers([])
@@ -693,6 +771,8 @@ export default function App() {
   }
 
   async function showConnections() {
+    if (projectBusy) return
+    projectView.flush()
     if (learningLeaveRef.current && !await learningLeaveRef.current()) return
     if (view === 'workspace' && projectDirty && workspace) {
       setProjectBusy(true)
@@ -793,6 +873,8 @@ export default function App() {
   }
 
   async function showLesson() {
+    if (projectBusy) return
+    projectView.flush()
     if (view === 'workspace' && projectDirty && workspace) {
       setProjectBusy(true)
       try {
@@ -1022,16 +1104,11 @@ export default function App() {
       setVersionPreview(null)
       let result = await projectService.run(created.id, revisionResult.revision.id)
       setRunResult(result)
-      for (let attempt = 0; attempt < 60 && (result.status === 'QUEUED' || result.status === 'RUNNING'); attempt += 1) {
-        await new Promise((resolve) => window.setTimeout(resolve, 1000))
-        result = await projectService.getRun(created.id, result.id)
-        setRunResult(result)
-      }
       setProjectNotice(result.status === 'SUCCEEDED'
         ? 'Google Sheets 데이터를 프로젝트 DB로 가져왔어요. 아래 실행 결과에서 저장·갱신한 행 수를 확인할 수 있습니다.'
         : result.status === 'FAILED'
           ? '프로젝트는 만들었지만 동기화 실행에 실패했어요. 아래 오류를 확인하고 코드를 수정한 뒤 다시 실행해 주세요.'
-          : '프로젝트는 만들었어요. 실행이 아직 진행 중입니다. 잠시 뒤 실행 결과를 확인해 주세요.')
+          : '프로젝트를 만들고 실행을 등록했어요. 실행 기록에서 같은 작업의 결과를 확인할 수 있습니다.')
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : '시트 데이터 프로젝트를 준비하지 못했습니다.'
       if (createdProjectId) {
@@ -1330,6 +1407,7 @@ export default function App() {
         projectService.listMembers(projectId),
         projectService.listTasks(projectId),
       ])
+      projectEntryJump.current = jump?.file_path ? loaded.id : null
       setProjectMembers(members)
       setProjectTasks(tasks)
       setWorkspace(loaded)
@@ -1337,9 +1415,14 @@ export default function App() {
       setPendingProjectDirectory(null)
       setProjectVersions(versions)
       setVersionPreview(null)
-      const targetPath = loaded.files.find(file => file.path === jump?.file_path)?.path ?? loaded.files[0]?.path ?? ''
-      resetProjectFiles(targetPath)
-      setEditorJump(jump?.file_path ? { path: targetPath, line: targetPath === jump.file_path ? jump.cursor_line ?? 1 : 1 } : null)
+      const recent = user ? readProjectView(user.id, loaded.id) : null
+      const targetPath = loaded.files.find(file => file.path === jump?.file_path)?.path ?? loaded.files.find(file => file.path === recent?.selected)?.path ?? loaded.files[0]?.path ?? ''
+      const available = new Set(loaded.files.map(file => file.path))
+      const tabs = (recent?.tabs ?? []).filter(path => available.has(path))
+      setSelectedPath(targetPath); setOpenFilePaths([...new Set([...tabs, ...(targetPath ? [targetPath] : [])])])
+      const savedLine = recent?.lines[targetPath]
+      setEditorJump(jump?.file_path ? { path: targetPath, line: targetPath === jump.file_path ? jump.cursor_line ?? 1 : 1 } : Number.isInteger(savedLine) ? { path: targetPath, line: savedLine! } : null)
+      setWorkspaceSection(jump?.file_path ? 'code' : 'overview')
       if (jump?.file_path) { setWorkspaceSection('code'); if (targetPath !== jump.file_path) setProjectNotice('원래 파일은 최신 프로젝트에 없어 첫 파일을 열었습니다. 학습 화면에서 당시 코드 버전을 확인할 수 있어요.') }
       if (jump?.notice) setProjectNotice(current => current ? `${current} ${jump.notice}` : jump.notice ?? '')
       setProjectDirty(false)
@@ -1357,6 +1440,7 @@ export default function App() {
 
   function updateProjectFile(content: string) {
     if (!workspace) return
+    if (projectRecovery.pending) return
     if (isProjectReadOnly) {
       setProjectError('이 프로젝트는 보기 전용 권한이라 수정할 수 없습니다.')
       return
@@ -1381,14 +1465,46 @@ export default function App() {
   }
 
   function openProjectFile(path: string) {
-    setEditorJump(null)
+    const line = projectView.recent?.lines[path]
+    setEditorJump(Number.isInteger(line) ? { path, line: line! } : null)
     setSelectedPath(path)
     setOpenFilePaths((current) => current.includes(path) ? current : [...current, path])
+  }
+
+  function openProjectSearch(mode: ProjectSearchMode) {
+    setWorkspaceSection('code'); setProjectSearchMode(mode); setProjectSearchFocus(value => value + 1)
+  }
+
+  function openProjectSearchHit(hit: ProjectSearchHit) {
+    const line = projectSearchMode === 'files' ? projectView.recent?.lines[hit.path] : hit.line
+    navigateProjectFile(hit.path, line, projectSearchMode === 'files' ? 1 : hit.column)
+    if (projectSearchMode === 'files') setProjectSearchMode(null)
+  }
+
+  function navigateProjectFile(path: string, line?: number, column = 1) {
+    if (!workspace?.files.some(file => file.path === path)) { setProjectError('이 파일은 현재 초안에 없습니다. 파일 목록을 다시 확인해 주세요.'); return }
+    openProjectFile(path)
+    const target = line ?? projectView.recent?.lines[path]
+    setEditorJump({ path, line: Number.isInteger(target) ? target! : 1, column, focus: true, requestId: ++editorNavigation.current })
+    setWorkspaceSection('code')
+    window.requestAnimationFrame(() => editorPanel.current?.scrollIntoView({ block: 'center' }))
   }
 
   function resetProjectFiles(path: string) {
     setSelectedPath(path)
     setOpenFilePaths(path ? [path] : [])
+  }
+
+  function resumeProjectView() {
+    if (!workspace || !projectView.recent || projectBusy || projectRecovery.pending) return
+    const recent = projectView.recent
+    const path = workspace.files.find(file => file.path === recent.selected)?.path ?? workspace.files[0]?.path ?? ''
+    if (path) {
+      openProjectFile(path)
+      const line = recent.lines[path]
+      setEditorJump(Number.isInteger(line) ? { path, line: line! } : null)
+    }
+    setWorkspaceSection(recent.section === 'overview' ? 'code' : recent.section)
   }
 
   async function createProjectEntry(event: FormEvent<HTMLFormElement>) {
@@ -2355,7 +2471,8 @@ export default function App() {
   }
 
   async function saveProjectDraft() {
-    if (!workspace) return
+    if (!workspace || projectBusy || projectRecovery.pending) return
+    if (projectNeedsReload) { await compareProjectDraft(); return }
     setProjectBusy(true)
     setProjectError('')
     try {
@@ -2363,13 +2480,15 @@ export default function App() {
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : '초안을 저장하지 못했습니다.'
       setProjectError(message)
-      setProjectNeedsReload(message.includes('최신 초안'))
+      setProjectNeedsReload((cause instanceof ProjectRequestError && cause.status === 409) || message.includes('최신 초안'))
     } finally {
       setProjectBusy(false)
     }
   }
 
   async function persistWorkspaceDraft(current: ProjectWorkspace): Promise<ProjectWorkspace> {
+    if (projectRecovery.pending) throw new Error('남아 있는 수정본을 먼저 확인해 주세요.')
+    if (isProjectReadOnly) throw new Error('현재 계정에는 초안 편집 권한이 없습니다. 수정본을 내려받아 보관할 수 있어요.')
     if (current.files.length > 50) throw new Error('프로젝트 파일은 50개 이하여야 합니다.')
     if (current.files.some((file) => file.content.length > 200_000)) throw new Error('파일 하나는 200,000자 이하여야 합니다.')
     if (current.files.reduce((total, file) => total + new TextEncoder().encode(file.content).byteLength, 0) > 1_000_000) {
@@ -2386,10 +2505,11 @@ export default function App() {
       saved = await projectService.saveDraft(current.id, current.draft_version, current.files)
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : '초안을 저장하지 못했습니다.'
-      setProjectNeedsReload(message.includes('최신 초안'))
+      setProjectNeedsReload((cause instanceof ProjectRequestError && cause.status === 409) || message.includes('최신 초안'))
       throw cause
     }
     const next = { ...current, draft_version: saved.draft_version, updated_at: saved.updated_at }
+    projectRecovery.saved(current)
     setWorkspace(next)
     setProjects((items) => items.map((item) => item.id === current.id
       ? { ...item, draft_version: saved.draft_version, updated_at: saved.updated_at }
@@ -2419,6 +2539,62 @@ export default function App() {
   function discardProjectChanges() {
     if (!projectDirty || !window.confirm('저장하지 않은 수정 내용을 버리고 마지막 저장 상태로 되돌릴까요?')) return
     void reloadWorkspace(true)
+  }
+
+  function downloadProjectRecovery(draft?: BrowserDraft) {
+    if (!workspace) return
+    const payload = { format: 'weblink.project-recovery', format_version: 1, project_id: workspace.id, project_name: workspace.name, draft: draft ?? projectRecovery.snapshot(workspace) }
+    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' }))
+    const link = document.createElement('a'); link.href = url; link.download = `WebLink-${workspace.id}-수정본.json`; link.click()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
+  async function compareProjectDraft() {
+    if (!workspace || projectBusy) return
+    const current = workspace
+    const draft = projectRecovery.snapshot(current)
+    setProjectBusy(true); setProjectError('')
+    try {
+      const [server, versions] = await Promise.all([projectService.get(current.id), projectService.listVersions(current.id)])
+      if (workspaceRef.current?.id === current.id) { setProjectVersions(versions); projectRecovery.compare(draft, server) }
+    } catch (cause) { setProjectError(cause instanceof Error ? cause.message : '서버 답안을 읽지 못했어요. 수정본을 내려받아 보관할 수 있습니다.') }
+    finally { setProjectBusy(false) }
+  }
+
+  function applyProjectRecovery(files: ProjectFile[]) {
+    const pending = projectRecovery.pending
+    if (!pending || isProjectReadOnly || projectBusy || workspace?.id !== pending.server.id) return
+    const issue = validateRecoveryFiles(files)
+    if (issue) { setProjectError(issue); return }
+    setWorkspace({ ...pending.server, files }); setProjectDirty(true); setProjectNeedsReload(false)
+    const available = new Set(files.map(file => file.path))
+    setOpenFilePaths(paths => { const kept = paths.filter(path => available.has(path)); return kept.length ? kept : files[0] ? [files[0].path] : [] })
+    setSelectedPath(path => available.has(path) ? path : files[0]?.path ?? '')
+    setVersionPreview(null); setWorkspaceSection('code'); setProjectError('')
+    setRunResult(null); setDebugSaved(false); setDebugHint(null); setEditorJump(null)
+    projectRecovery.accept()
+    setProjectNotice('수정본을 편집기로 가져왔어요. 자동 저장은 멈춰 있습니다. 내용을 확인한 뒤 초안 저장을 눌러 주세요.')
+  }
+
+  async function importProjectRecovery(file: File) {
+    if (!workspace || projectBusy) return
+    if (projectDirty) { setProjectError('현재 수정 내용을 먼저 저장하거나 변경 취소한 뒤 복구 파일을 가져와 주세요. 필요한 수정은 내려받아 보관할 수 있어요.'); return }
+    if (file.size > 14_000_000) { setProjectError('복구 파일은 14MB 이하여야 합니다.'); return }
+    const currentId = workspace.id
+    setProjectBusy(true); setProjectError('')
+    try {
+      const payload = JSON.parse(await file.text()) as { format?: string; format_version?: number; project_id?: string; draft?: unknown }
+      if (payload?.format !== 'weblink.project-recovery' || payload.format_version !== 1 || payload.project_id !== currentId) throw new Error('현재 프로젝트에서 내려받은 WebLink 수정본 JSON을 선택해 주세요.')
+      const draft = parseBrowserDraft(JSON.stringify(payload.draft) ?? null)
+      if (!draft) throw new Error('복구 파일의 답안 형식이나 버전이 올바르지 않습니다.')
+      for (const contents of [draft.answers, draft.baseAnswers ?? {}]) {
+        const issue = validateRecoveryFiles(Object.entries(contents).map(([path, content]) => ({ path, content })))
+        if (issue) throw new Error(issue)
+      }
+      const [server, versions] = await Promise.all([projectService.get(currentId), projectService.listVersions(currentId)])
+      if (workspaceRef.current?.id === currentId) { setProjectVersions(versions); projectRecovery.compare(draft, server) }
+    } catch (cause) { setProjectError(cause instanceof SyntaxError ? 'JSON을 읽지 못했어요. WebLink에서 내려받은 수정본 파일인지 확인해 주세요.' : cause instanceof Error ? cause.message : '복구 파일을 가져오지 못했습니다.') }
+    finally { setProjectBusy(false) }
   }
 
   async function syncWorkspaceToLocalDirectory() {
@@ -2491,6 +2667,7 @@ export default function App() {
     setProjectBusy(true)
     try {
       const [loaded, versions] = await Promise.all([projectService.get(workspace.id), projectService.listVersions(workspace.id)])
+      if (projectDirty) projectRecovery.saved(workspace)
       setWorkspace(loaded)
       setProjectVersions(versions)
       setVersionPreview(null)
@@ -2600,7 +2777,8 @@ export default function App() {
   }
 
   async function runProject() {
-    if (!workspace) return
+    if (!workspace || projectBusy || projectRunPending || projectRecovery.pending) return
+    projectView.flush()
     setWorkspaceSection('code')
     if (isProjectReadOnly) {
       setProjectError('보기 전용 권한으로는 프로젝트를 실행할 수 없습니다.')
@@ -2619,17 +2797,20 @@ export default function App() {
       const current = projectDirty ? await persistWorkspaceDraft(workspace) : workspace
       const created = await projectService.createRevision(current.id)
       const revision = created.revision
+      const verified = await projectService.get(current.id)
+      if (verified.draft_version !== current.draft_version || !sameFiles(fileContents(verified.files), fileContents(current.files))) {
+        setProjectNeedsReload(true)
+        throw new ProjectRequestError('실행 준비 중 서버 초안이 바뀌었어요. 내 수정과 서버 변경을 비교한 뒤 다시 실행해 주세요. 실행 요청은 등록하지 않았습니다.', 409)
+      }
       if (created.created) {
-        setWorkspace((current) => current ? { ...current, revisions: [revision, ...current.revisions] } : current)
+        setWorkspace((active) => active?.id === current.id ? { ...active, revisions: [revision, ...active.revisions] } : active)
       }
-      let result = await projectService.run(current.id, revision.id)
+      if (runRequest.current?.projectId !== current.id || runRequest.current.revisionId !== revision.id) runRequest.current = { projectId: current.id, revisionId: revision.id, key: crypto.randomUUID() }
+      const result = await projectService.run(current.id, revision.id, runRequest.current.key)
+      runRequest.current = null
+      runSnapshot.current = { runId: result.id, files: JSON.stringify(current.files) }
       setRunResult(result)
-      while (result.status === 'QUEUED' || result.status === 'RUNNING') {
-        await new Promise((resolve) => window.setTimeout(resolve, 1000))
-        result = await projectService.getRun(current.id, result.id)
-        setRunResult(result)
-      }
-      setProjectNotice(result.status === 'SUCCEEDED' ? '실행이 완료되었습니다.' : '실행이 끝났습니다. 출력을 확인해 주세요.')
+      setProjectNotice('저장한 코드의 실행을 등록했어요. 결과를 기다리면서 편집할 수 있으며, 기다리기 중지는 서버 작업을 취소하지 않습니다.')
     } catch (cause) {
       setProjectError(cause instanceof Error ? cause.message : '프로젝트를 실행하지 못했습니다.')
     } finally {
@@ -2639,7 +2820,7 @@ export default function App() {
 
   async function saveDebugNotes(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!workspace || !runResult || !debugHypothesis.trim()) return
+    if (!workspace || !runResult || runResult.project_id !== workspace.id || !debugHypothesis.trim()) return
     setProjectBusy(true)
     setProjectError('')
     try {
@@ -2654,7 +2835,7 @@ export default function App() {
   }
 
   async function requestDebugHint() {
-    if (!workspace || !runResult || !debugHypothesis.trim()) return
+    if (!workspace || !runResult || runResult.project_id !== workspace.id || !debugHypothesis.trim()) return
     setAiBusy(true)
     setProjectError('')
     try {
@@ -2820,7 +3001,7 @@ export default function App() {
 
   if (loading) return <main className="welcome"><p className="status">WebLink를 준비하고 있어요…</p></main>
 
-  if (showLanding) return <LandingPage isAuthenticated={Boolean(user)} onEnter={(nextMode) => { setMode(nextMode); setError(''); setShowLanding(false) }} />
+  if (showLanding) return <LandingPage isAuthenticated={Boolean(user) && !sessionExpired} onEnter={(nextMode) => { setMode(nextMode); setError(''); setShowLanding(false); if (user && !sessionExpired) void showProjects() }} />
 
   if (user && !sessionExpired) {
     return (
@@ -2898,7 +3079,7 @@ export default function App() {
               </section>
             </details>
             {projectNotice && <p className="project-notice project-list-notice" role="status">{projectNotice}</p>}
-            <div className="project-list-layout">
+            <>{cachedProjectIds.size > 0 && <p className="project-notice" role="status">이 브라우저에 수정본이 남아 있는 프로젝트가 {cachedProjectIds.size}개 있어요. 해당 프로젝트를 열면 복구하거나 서버 파일과 비교할 수 있습니다.</p>}</><div className="project-list-layout">
               {projectListPanel && <div className="project-side-actions">
                 {projectListPanel === 'create' && <form className="project-create-form" onSubmit={handleCreateProject}>
                   <div className="project-form-heading"><div><p className="eyebrow">새 출발</p><h2>프로젝트 만들기</h2></div><button className="panel-close-button" type="button" aria-label="프로젝트 만들기 닫기" onClick={() => setProjectListPanel(null)}>×</button></div>
@@ -2928,7 +3109,7 @@ export default function App() {
                   <div className="project-card-entry" key={project.id}>
                     <button className="project-card" type="button" onClick={() => openProject(project.id)} disabled={projectBusy}>
                       <span className="project-card-icon">↗</span>
-                      <span className="project-card-copy"><strong>{project.name}</strong><small>{project.description || '설명이 아직 없습니다.'}</small><small>초안 v{project.draft_version} · {new Date(project.updated_at).toLocaleDateString('ko-KR')}</small><span className={`project-member-role project-member-role-${project.role.toLocaleLowerCase()}`}>{project.role === 'OWNER' ? '소유자' : project.role === 'EDITOR' ? '편집자로 참여' : '보기 전용으로 참여'}</span><span className="project-storage-badge">{projectFolders[project.id] ? `폴더 · ${projectFolders[project.id]}` : 'WebLink 작업 사본'}</span></span>
+                      <span className="project-card-copy"><strong>{project.name}</strong><small>{project.description || '설명이 아직 없습니다.'}</small><small>초안 v{project.draft_version} · {new Date(project.updated_at).toLocaleDateString('ko-KR')}</small><span className={`project-member-role project-member-role-${project.role.toLocaleLowerCase()}`}>{project.role === 'OWNER' ? '소유자' : project.role === 'EDITOR' ? '편집자로 참여' : '보기 전용으로 참여'}</span>{cachedProjectIds.has(project.id) && <span className="project-storage-badge">브라우저 복구본 있음</span>}<span className="project-storage-badge">{projectFolders[project.id] ? `폴더 · ${projectFolders[project.id]}` : 'WebLink 작업 사본'}</span></span>
                     </button>
                     {project.role === 'OWNER' && <button className="plain-danger-button project-list-delete" type="button" onClick={() => deleteProjectById(project.id, project.name)} disabled={projectBusy} aria-label={`${project.name} 프로젝트 삭제`}>삭제</button>}
                   </div>
@@ -2939,14 +3120,15 @@ export default function App() {
         ) : view === 'workspace' ? workspace ? (
           <main className="workspace-main">
             <div className="workspace-heading">
-              <div><button className="back-link" type="button" onClick={showProjects}>← 프로젝트 목록</button><div className="workspace-title-row"><h1>{workspace.name}</h1>{canManageProject && <button type="button" className="project-details-edit-button" onClick={beginProjectDetailsEdit} disabled={projectBusy || projectDirty} title={projectDirty ? '초안을 먼저 저장해 주세요.' : '프로젝트 이름과 설명 수정'} aria-label="프로젝트 이름과 설명 수정">✎</button>}</div><p>초안 버전 {workspace.draft_version}{projectBusy && projectDirty ? ' · 저장 중' : projectDirty && projectNeedsReload ? ' · 최신 초안 확인 필요' : projectDirty && projectError ? ' · 저장 문제 확인' : projectDirty ? ' · 1.5초 후 자동 저장' : ' · 저장됨'}</p></div>
+              <div><button className="back-link" type="button" onClick={showProjects}>← 프로젝트 목록</button><div className="workspace-title-row"><h1>{workspace.name}</h1>{canManageProject && <button type="button" className="project-details-edit-button" onClick={beginProjectDetailsEdit} disabled={projectBusy || projectDirty} title={projectDirty ? '초안을 먼저 저장해 주세요.' : '프로젝트 이름과 설명 수정'} aria-label="프로젝트 이름과 설명 수정">✎</button>}</div><p>초안 버전 {workspace.draft_version}{projectBusy && projectDirty ? ' · 저장 중' : projectDirty && projectNeedsReload ? ' · 최신 초안 확인 필요' : projectDirty && projectError ? ' · 저장 문제 확인' : projectDirty && projectRecovery.paused ? ' · 변경 검토 중 · 수동 저장 필요' : projectDirty ? ' · 1.5초 후 자동 저장' : ' · 저장됨'}</p></div>
               <div className="workspace-actions">
-                {projectDirty ? <button className="secondary-button" type="button" onClick={saveProjectDraft} disabled={projectBusy || isProjectReadOnly}>{projectBusy ? '저장 중…' : '초안 저장'}</button> : <span className="workspace-save-state">{isProjectReadOnly ? '보기 전용' : '✓ 저장됨'}</span>}
-                <button className="primary-button" type="button" onClick={runProject} disabled={projectBusy || isProjectReadOnly || !workspace.files.some((file) => file.path === 'main.py')} title={isProjectReadOnly ? '보기 전용 권한으로는 실행할 수 없습니다.' : !workspace.files.some((file) => file.path === 'main.py') ? '루트에 main.py 파일이 있어야 실행할 수 있습니다.' : undefined}>{projectBusy ? '실행 중…' : '실행'}</button>
+                {projectDirty ? <button className="secondary-button" type="button" onClick={saveProjectDraft} disabled={projectBusy || isProjectReadOnly}>{projectBusy ? '저장 중…' : projectNeedsReload ? '충돌 확인 필요' : '초안 저장'}</button> : <span className="workspace-save-state">{isProjectReadOnly ? '보기 전용' : '✓ 저장됨'}</span>}
+                <button className="primary-button" type="button" onClick={runProject} disabled={projectBusy || projectRunPending || isProjectReadOnly || !workspace.files.some((file) => file.path === 'main.py')} title={isProjectReadOnly ? '보기 전용 권한으로는 실행할 수 없습니다.' : !workspace.files.some((file) => file.path === 'main.py') ? '루트에 main.py 파일이 있어야 실행할 수 있습니다.' : undefined}>{projectBusy ? '처리 중…' : projectRunPending ? '실행 진행 중' : '실행'}</button>
                 <details className="workspace-more-menu"><summary>더 보기</summary><div>
                   {projectDirty && <button type="button" onClick={discardProjectChanges} disabled={projectBusy || isProjectReadOnly}>변경 취소</button>}
                   <button type="button" onClick={saveProjectVersion} disabled={projectBusy || isProjectReadOnly}>{projectBusy ? '처리 중…' : '버전 저장'}</button>
                   <button type="button" onClick={downloadProjectArchive} disabled={projectBusy || projectAccessLost}>{projectBusy ? '처리 중…' : 'ZIP 다운로드'}</button>
+                  <button type="button" onClick={() => downloadProjectRecovery()}>현재 수정본 내려받기 · 서버 저장 불필요</button>
                   {canManageProject && <button className="is-danger" type="button" onClick={deleteCurrentProject} disabled={projectBusy}>프로젝트 삭제</button>}
                 </div></details>
               </div>
@@ -2958,8 +3140,22 @@ export default function App() {
             </form>}
             {projectNotice && <p className="project-notice" role="status">{projectNotice}</p>}
             {projectError && <p className="form-error project-message" role="alert">{projectError}</p>}
+            {projectRecovery.storageNotice && <p className="project-notice" role="status">{projectRecovery.storageNotice}</p>}
+            {projectRecovery.paused && <p className="project-notice" role="status">변경 내용을 검토 중입니다. 자동 저장은 멈췄으며 초안 저장을 누르면 다시 시작합니다.</p>}
+            {projectRecovery.pending && <ProjectDraftRecovery key={`${workspace.id}:${projectRecovery.pending.server.draft_version}:${projectRecovery.pending.draft.updatedAt ?? ''}`} draft={projectRecovery.pending.draft} server={projectRecovery.pending.server} readOnly={isProjectReadOnly || projectBusy} storageNotice={projectRecovery.storageNotice} canDefer={projectRecovery.canDefer} onLeave={() => { projectView.flush(); void loadProjectList() }} onApply={applyProjectRecovery} onDownload={() => downloadProjectRecovery(projectRecovery.pending?.draft)} onDiscard={() => {
+              const server = projectRecovery.pending?.server
+              projectRecovery.dismiss()
+              if (server) {
+                setWorkspace(server); setProjectDirty(false); setProjectNeedsReload(false); setProjectError('')
+                const available = new Set(server.files.map(file => file.path))
+                setOpenFilePaths(paths => { const kept = paths.filter(path => available.has(path)); return kept.length ? kept : server.files[0] ? [server.files[0].path] : [] })
+                setSelectedPath(path => available.has(path) ? path : server.files[0]?.path ?? '')
+                setRunResult(null); setDebugSaved(false); setDebugHint(null); setVersionPreview(null); setEditorJump(null)
+                setProjectNotice('확인한 서버 저장본을 사용합니다.')
+              }
+            }} />}
             {workspaceSection === 'code' && !workspace.files.some((file) => file.path === 'main.py') && <p className="form-error project-message" role="status">루트 main.py가 없어 실행할 수 없어요. 왼쪽 + 버튼에서 파일 종류를 선택하고 <code>main.py</code>를 만들면 다시 실행할 수 있습니다.</p>}
-            {projectNeedsReload && <button className="reload-draft-button" type="button" onClick={() => void reloadWorkspace()} disabled={projectBusy || isProjectReadOnly}>서버의 최신 초안 불러오기</button>}
+            {projectNeedsReload && <div className="project-recovery-actions"><button className="reload-draft-button" type="button" onClick={() => void compareProjectDraft()} disabled={projectBusy || isProjectReadOnly}>내 수정과 서버 변경 비교·합치기</button><button className="secondary-button" type="button" onClick={() => downloadProjectRecovery()}>내 수정본 보관하기</button><button type="button" onClick={() => void reloadWorkspace()} disabled={projectBusy || isProjectReadOnly}>내 수정 버리고 서버 초안 불러오기</button></div>}
             <nav className="workspace-section-nav" aria-label="프로젝트 작업 영역">
               <button type="button" className={workspaceSection === 'overview' ? 'is-active' : ''} aria-pressed={workspaceSection === 'overview'} onClick={() => setWorkspaceSection('overview')}><strong>개요</strong><span>프로젝트 소개와 진행 상황</span></button>
               <button type="button" className={workspaceSection === 'code' ? 'is-active' : ''} aria-pressed={workspaceSection === 'code'} onClick={() => setWorkspaceSection('code')}><strong>코드 편집</strong><span>파일 {workspace.files.length}개{projectDirty ? ' · 저장 안 됨' : ''}</span></button>
@@ -2968,6 +3164,7 @@ export default function App() {
               <button type="button" className={workspaceSection === 'storage' ? 'is-active' : ''} aria-pressed={workspaceSection === 'storage'} onClick={() => setWorkspaceSection('storage')}><strong>저장 위치</strong><span>{localProjectDirectory ? `연결됨 · ${localProjectDirectory.name}` : 'WebLink 저장'}</span></button>
             </nav>
             <section className="project-overview" aria-labelledby="project-overview-title" hidden={workspaceSection !== 'overview'}>
+              {projectView.recent && <div className="project-resume"><div><strong>최근 작업 이어가기</strong><small>{({ overview: '개요', code: '코드 편집', tasks: '작업 보드', team: '팀 관리', storage: '저장 위치' })[projectView.recent.section]}{projectView.recent.section === 'code' && projectView.recent.selected ? ` · ${projectView.recent.selected}` : ''} · {new Date(projectView.recent.updatedAt).toLocaleString('ko-KR')}</small></div><button className="secondary-button" type="button" onClick={resumeProjectView} disabled={projectBusy || Boolean(projectRecovery.pending)}>이어서 작업</button></div>}
               <div className="project-overview-hero">
                 <div className="project-overview-intro">
                   <span className="project-overview-mark" aria-hidden="true">{workspace.name.trim().slice(0, 1).toLocaleUpperCase() || 'W'}</span>
@@ -3006,7 +3203,7 @@ export default function App() {
               </div>
             </section>
             <section className="project-collaborators-card" hidden={workspaceSection !== 'team'}>
-              <div className="project-collaborators-heading"><div><p className="eyebrow">함께 작업</p><h2>프로젝트 팀원</h2><p>팀원은 각자 WebLink 계정으로 같은 초안을 열어 이어서 작업할 수 있어요.</p></div><span>{projectEventsConnected ? `현재 ${onlineProjectMemberIds.length}명 접속 · 팀원 ${projectMembers.length}명` : `팀원 ${projectMembers.length}명`}</span></div>
+              <div className="project-collaborators-heading"><div><p className="eyebrow">함께 작업</p><h2>프로젝트 팀원</h2><p>팀원은 각자 WebLink 계정으로 같은 초안을 열어 이어서 작업할 수 있어요.</p></div><span>{projectEventsConnected ? `현재 ${onlineProjectMemberIds.length}명 접속 · 팀원 ${projectMembers.length}명` : `팀원 ${projectMembers.length}명 · 실시간 알림 연결 대기 · 주기 갱신 중`}</span></div>
               {canManageProject && <form className="project-member-form" onSubmit={addProjectMember}>
                 <label>WebLink 계정 이메일<input type="email" value={memberEmail} onChange={(event) => setMemberEmail(event.target.value)} placeholder="친구의 가입 이메일" required maxLength={320} disabled={projectBusy} /></label>
                 <label>권한<select value={memberRole} onChange={(event) => setMemberRole(event.target.value as 'EDITOR' | 'VIEWER')} disabled={projectBusy}><option value="EDITOR">편집 가능</option><option value="VIEWER">보기 전용</option></select></label>
@@ -3046,6 +3243,7 @@ export default function App() {
             </section>
             <section className="workspace-storage-card" hidden={workspaceSection !== 'storage'}>
               <div className="workspace-storage-summary"><div><p className="eyebrow">프로젝트 파일 저장 위치</p><h2>{localProjectDirectory ? `내 컴퓨터 · ${localProjectDirectory.name}` : 'WebLink 작업 공간'}</h2><p>{localProjectDirectory ? '초안을 저장하면 선택한 폴더에도 파일이 기록됩니다. GitHub Desktop에서 커밋·푸시해 친구와 공유할 수 있어요.' : '파일은 WebLink 작업 공간에 저장 중입니다. 내 컴퓨터나 GitHub Desktop 폴더를 연결해 코드 사본을 직접 관리할 수 있어요.'}</p></div><span className={`storage-state ${localProjectDirectory ? 'storage-state-local' : ''}`}>{localProjectDirectory ? '폴더 연결됨' : 'WebLink 저장'}</span></div>
+              <details className="project-offline-recovery"><summary>저장 실패·다른 기기에서 이어가기 · 수정본 보관과 복구</summary><p>수정본 JSON에는 파일과 비교 기준이 들어갑니다. 서버 저장이 실패해도 현재 내용을 내려받을 수 있어요. 같은 WebLink 데이터베이스의 같은 프로젝트에서 파일을 다시 가져오면 서버 내용과 비교한 뒤 복구합니다. 새 프로젝트나 별도의 데이터베이스로 옮길 때는 기존 ZIP 가져오기를 이용하세요.</p><div className="project-recovery-actions"><button className="secondary-button" type="button" onClick={() => downloadProjectRecovery()}>현재 수정본 JSON 내려받기</button><label>수정본 JSON 가져오기<input type="file" accept=".json,application/json" disabled={projectBusy || isProjectReadOnly} onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void importProjectRecovery(file) }} /></label></div><small>브라우저 임시 보관은 이 기기에서만 유지됩니다. 다운로드한 파일에는 코드가 포함되므로 필요한 사람에게만 전달하세요.</small></details>
               {githubSource?.connected && <div className="github-source-panel"><div><p className="eyebrow">가져온 GitHub 원본</p><h3><a href={githubSource.repository_url ?? '#'} target="_blank" rel="noreferrer">{githubSource.repository_url?.replace('https://github.com/', '')}</a></h3><p>브랜치 <strong>{githubSource.branch}</strong>{githubSource.is_private ? ' · 비공개 저장소' : ' · 공개 저장소'} · 가져온 커밋 <code>{githubSource.imported_sha?.slice(0, 7)}</code></p></div><div className="github-source-actions"><span className={`github-source-state${githubSource.update_available ? ' is-ahead' : ''}`}>{githubSource.status_message ?? (githubSource.latest_sha === null ? 'GitHub 연결 필요' : githubSource.update_available ? '새 변경 있음' : '최신 상태')}</span><button className="secondary-button" type="button" onClick={() => void refreshGitHubSource()} disabled={projectBusy}>{projectBusy ? '확인 중…' : 'GitHub 변경 확인'}</button>{githubSource.update_available && <button className="primary-button" type="button" onClick={() => void pullGitHubSourceUpdates()} disabled={projectBusy || projectDirty || projectNeedsReload || isProjectReadOnly}>{isProjectReadOnly ? '보기 전용' : projectDirty ? '먼저 초안 저장' : projectNeedsReload ? '최신 초안 먼저 확인' : '변경 가져오기'}</button>}{(githubSource.status_message || (githubSource.is_private && !githubSource.token_connected)) && <button className="plain-link-button" type="button" onClick={showConnections} disabled={projectBusy}>GitHub 권한 연결</button>}</div><small>변경을 받으면 현재 초안은 저장 버전으로 백업합니다. 이 컴퓨터 폴더는 자동으로 변경하지 않습니다.</small></div>}
               {!localProjectDirectory ? <button className="secondary-button" type="button" onClick={chooseLocalProjectDirectory} disabled={projectBusy}>내 컴퓨터 / GitHub Desktop 폴더 연결</button> : <div className="workspace-storage-actions"><button className="secondary-button" type="button" onClick={refreshProjectFromLocalDirectory} disabled={projectBusy || projectDirty || isProjectReadOnly}>폴더에서 최신 파일 가져오기</button><button className="secondary-button" type="button" onClick={syncWorkspaceToLocalDirectory} disabled={projectBusy || projectDirty}>WebLink 파일을 폴더에 저장</button><button className="plain-danger-button" type="button" onClick={disconnectLocalProjectDirectory} disabled={projectBusy}>연결 해제</button></div>}
               {pendingProjectDirectory && <div className="folder-connection-choice"><strong>선택한 폴더: {pendingProjectDirectory.name}</strong><p>전용 프로젝트 폴더를 선택한 뒤 한 방향을 고르세요. 가져오기는 현재 WebLink 초안을 교체하고, 폴더에 복사하기는 같은 경로의 파일을 덮어씁니다. 비밀 파일은 제외됩니다.</p><div><button className="secondary-button" type="button" onClick={importLocalProjectDirectory} disabled={projectBusy || isProjectReadOnly}>폴더에서 WebLink로 가져오기</button><button className="primary-button" type="button" onClick={exportProjectToLocalDirectory} disabled={projectBusy}>WebLink 파일을 폴더에 복사</button><button className="plain-danger-button" type="button" onClick={() => setPendingProjectDirectory(null)} disabled={projectBusy}>취소</button></div></div>}
@@ -3131,15 +3329,21 @@ export default function App() {
                 })}
               </div>
             </section>
-            {runResult && <section className="run-output" aria-live="polite" hidden={workspaceSection !== 'code'}>
-              <div className="run-output-heading"><strong>실행 결과 · {runResult.status}</strong><button type="button" className="run-output-close" onClick={() => setRunResult(null)} disabled={projectBusy} aria-label="실행 결과 닫기" title="닫기">×</button></div>
-              <p><b>예상</b> 코드를 실행하면 의도한 결과가 나와야 합니다.</p><p><b>실제 출력</b></p><pre>{runResult.stdout || '(출력 없음)'}</pre><p><b>오류</b></p><pre>{runResult.stderr || (runResult.failure_category ? `실패 유형: ${runResult.failure_category}` : '(오류 없음)')}</pre><p><b>종료 코드</b> {runResult.exit_code ?? '실행 중'}</p>
+            <div hidden={workspaceSection !== 'code'}><ProjectRunHistory key={`${user.id}:${workspace.id}`} history={projectRuns.history} revisions={workspace.revisions} loading={projectRuns.loading} waiting={projectRuns.waiting} error={projectRuns.error} current={activeProjectRun} hidden={runOutputHidden} onReload={projectRuns.reload} onStop={projectRuns.stop} onResume={projectRuns.resume} onReveal={() => setRunOutputHidden(false)} onSelect={run => { setRunResult(run); setRunOutputHidden(false); setDebugSaved(false); setDebugHint(null); if (run.status === 'QUEUED' || run.status === 'RUNNING') projectRuns.resume() }} /></div>
+            {runResult && runResult.project_id === workspace.id && !runOutputHidden && <section className="run-output" aria-live="polite" hidden={workspaceSection !== 'code'}>
+              <div className="run-output-heading"><strong>실행 결과 · {projectRunLabels[runResult.status]}</strong><button type="button" className="run-output-close" onClick={() => setRunOutputHidden(true)} aria-label="실행 결과 닫기" title="닫기">×</button></div>
+              <p>{projectRunTime(runResult.created_at)} · 서버에 저장된 실행 기록입니다.</p>
+              <p role="status">{runSnapshot.current?.runId === runResult.id ? runSnapshot.current.files === JSON.stringify(workspace.files) ? '실행을 요청한 코드와 현재 편집 내용이 같아요.' : '실행을 요청한 뒤 코드가 바뀌었어요. 아래 출력은 변경 전 코드의 결과입니다.' : '저장된 코드의 실행 결과입니다. 현재 편집 내용과의 일치를 확인한 기록은 아닙니다.'}</p>
+              <button type="button" className="secondary-button" onClick={() => { const url = URL.createObjectURL(new Blob([JSON.stringify(runResult, null, 2)], { type: 'application/json;charset=utf-8' })); const link = document.createElement('a'); link.href = url; link.download = `WebLink-실행-${runResult.id}.json`; link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000) }}>이 실행 기록 내려받기</button>
+              <p><b>실제 출력</b></p><pre>{runResult.stdout || (projectRunPending ? '(실행 결과를 기다리는 중)' : '(출력 없음)')}</pre><p><b>오류</b></p><pre>{runResult.stderr || (runResult.failure_category ? `실패 유형: ${runResult.failure_category}` : '(오류 없음)')}</pre><p><b>종료 코드</b> {runResult.exit_code ?? (projectRunPending ? '아직 없음' : '기록 없음')}</p>
               {runResult.status === 'FAILED' && <form className="debug-notes" onSubmit={saveDebugNotes}><h3>오류를 되짚어 보기</h3><p className="debug-explainer">실행 오류를 보고 예상 결과와 원인에 대한 생각을 적어 두면, 이 실행에 연결해 저장하고 나중에 이어서 볼 수 있어요.</p><label>어떤 결과를 예상했나요?<textarea value={expectedOutput} onChange={(event) => setExpectedOutput(event.target.value)} rows={2} maxLength={16384} /></label><label>왜 이런 결과가 나왔다고 생각하나요?<textarea value={debugHypothesis} onChange={(event) => setDebugHypothesis(event.target.value)} rows={3} required maxLength={4000} placeholder="오류가 난 이유를 추측해서 적어 보세요." /></label><p className="ai-privacy-note">AI 힌트를 요청하면 main.py 일부, 실행 오류, 예상 결과와 가설이 AI 제공자에게 전달됩니다. 코드는 대신 고치지 않아요.</p><div className="debug-actions"><button className="secondary-button" type="submit" disabled={projectBusy || aiBusy || !debugHypothesis.trim()}>{debugSaved ? '디버깅 기록 업데이트' : '디버깅 기록 저장'}</button><button className="primary-button" type="button" onClick={requestDebugHint} disabled={projectBusy || aiBusy || !debugHypothesis.trim()}>{aiBusy ? '힌트를 생각하고 있어요…' : 'AI 디버깅 힌트'}</button></div>{debugSaved && <span role="status">이 실행에 대한 디버깅 기록을 저장했어요.</span>}{debugHint && <div className="ai-hint" role="status"><strong>{debugHint.summary}</strong><p>{debugHint.hint}</p><em>{debugHint.next_question}</em></div>}</form>}
             </section>}
             <div className="workspace-grid" hidden={workspaceSection !== 'code'}>
               <aside className="file-panel">
+                <div className="project-search-launch"><button type="button" disabled={projectBusy} onClick={() => openProjectSearch('files')}>파일 찾기 · Ctrl+P</button><button type="button" disabled={projectBusy} onClick={() => openProjectSearch('content')}>전체 내용 찾기</button></div>
+                {projectSearchMode && <ProjectSearch key={`${user.id}:${workspace.id}`} files={projectSearchFiles} mode={projectSearchMode} focusToken={projectSearchFocus} onMode={setProjectSearchMode} onClose={() => setProjectSearchMode(null)} onOpen={openProjectSearchHit} />}
                 <div className="file-panel-heading"><p className="panel-label">파일 탐색기</p><button type="button" className="file-drive-import-button" onClick={() => void addGoogleDriveFilesToProject()} disabled={projectBusy || isProjectReadOnly}>Drive에서 추가</button><button type="button" className="file-add-button" onClick={() => { setNewEntryPath(''); setNewEntryKind('auto'); setShowNewEntryForm((current) => !current) }} disabled={projectBusy || isProjectReadOnly} aria-label="새 파일 또는 폴더 만들기" title="새 파일 또는 폴더 만들기">＋</button></div>
-                <ProjectFileTree tree={projectFileTree} selectedPath={selectedPath} busy={projectBusy || isProjectReadOnly} onOpen={openProjectFile} onRename={(path) => void renameProjectFile(path)} onDelete={(path) => void deleteProjectFile(path)} onRenameFolder={(path) => void renameProjectFolder(path)} onDeleteFolder={(path) => void deleteProjectFolder(path)} onMoveFile={(path, folder) => void moveProjectFileToFolder(path, folder)} onImportFiles={(items, folder) => void importDroppedFiles(items, folder)} />
+                <ProjectFileTree tree={projectFileTree} changedPaths={projectChangedPaths} selectedPath={selectedPath} busy={projectBusy || isProjectReadOnly} onOpen={openProjectFile} onRename={(path) => void renameProjectFile(path)} onDelete={(path) => void deleteProjectFile(path)} onRenameFolder={(path) => void renameProjectFolder(path)} onDeleteFolder={(path) => void deleteProjectFolder(path)} onMoveFile={(path, folder) => void moveProjectFileToFolder(path, folder)} onImportFiles={(items, folder) => void importDroppedFiles(items, folder)} />
                 {showNewEntryForm && <form className="new-entry-form" onSubmit={createProjectEntry}>
                   <label>파일 또는 폴더 경로<input autoFocus value={newEntryPath} onChange={(event) => setNewEntryPath(event.target.value)} placeholder="예: src/main.py 또는 src" required maxLength={240} /></label>
                   <label>항목 종류<select value={newEntryKind} onChange={(event) => setNewEntryKind(event.target.value as NewProjectEntryKind)}><option value="auto">자동 판단{newEntryPath.trim() ? ` · ${inferProjectEntryKind(newEntryPath) === 'file' ? '파일' : '폴더'}` : ''}</option><option value="file">파일</option><option value="folder">폴더</option></select></label>
@@ -3159,27 +3363,29 @@ export default function App() {
                     const file = workspace.files.find((item) => item.path === path)
                     if (!file) return null
                     return <div key={file.path} className={`editor-tab${selectedPath === file.path ? ' active' : ''}`}>
-                      <button type="button" role="tab" aria-selected={selectedPath === file.path} className="editor-tab-select" onClick={() => openProjectFile(file.path)}><span className="editor-tab-icon">{file.path.endsWith('.py') ? '🐍' : '▤'}</span>{file.path.split('/').pop()}{selectedPath === file.path && projectDirty && <i aria-label="저장되지 않음" />}</button>
+                      <button type="button" role="tab" aria-selected={selectedPath === file.path} className="editor-tab-select" onClick={() => openProjectFile(file.path)}><span className="editor-tab-icon">{file.path.endsWith('.py') ? '🐍' : '▤'}</span>{file.path.split('/').pop()}{projectChangedPaths.has(file.path) && <i aria-label="저장되지 않음" />}</button>
                       <button type="button" className="editor-tab-close" onClick={() => closeProjectFile(file.path)} aria-label={`${file.path} 탭 닫기`} title="탭 닫기">×</button>
                     </div>
                   })}
                 </div>
-                <div className="editor-toolbar"><span>{selectedPath || '파일을 선택해 주세요'}</span><span>{projectDirty ? '변경됨' : '저장됨'}</span></div>
-                <div className="monaco-editor-container">
-                  {selectedPath ? <Suspense fallback={<div className="editor-empty">VS Code 편집기를 불러오는 중…</div>}><MonacoCodeEditor path={selectedPath} initialLine={editorJump?.path === selectedPath ? editorJump.line : undefined} value={workspace.files.find((file) => file.path === selectedPath)?.content ?? ''} readOnly={projectBusy || isProjectReadOnly} onChange={(value) => updateProjectFile(value)} /></Suspense> : <div className="editor-empty">왼쪽에서 파일을 선택하거나 새 파일을 추가하세요.</div>}
+                <div className="editor-toolbar"><span>{selectedPath || '파일을 선택해 주세요'}</span><span>{!selectedPath ? '선택한 파일 없음' : projectChangedPaths.has(selectedPath) ? '이 파일 변경됨' : '이 파일 저장 기준과 같음'}</span></div>
+                <div className="monaco-editor-container" ref={editorPanel}>
+                  {selectedPath ? <Suspense fallback={<div className="editor-empty">VS Code 편집기를 불러오는 중…</div>}><MonacoCodeEditor path={`project/${user.id}/${workspace.id}/${selectedPath}`} initialLine={editorJump?.path === selectedPath ? editorJump.line : undefined} initialColumn={editorJump?.path === selectedPath ? editorJump.column : undefined} focusOnReveal={editorJump?.path === selectedPath && editorJump.focus} revealToken={editorJump?.path === selectedPath ? editorJump.requestId : undefined} value={workspace.files.find((file) => file.path === selectedPath)?.content ?? ''} readOnly={projectBusy || isProjectReadOnly} onCursorChange={projectView.onCursor} onChange={(value) => updateProjectFile(value)} /></Suspense> : <div className="editor-empty">왼쪽에서 파일을 선택하거나 새 파일을 추가하세요.</div>}
                 </div>
-                <div className="editor-statusbar"><span>WebLink 편집기</span><span>{selectedPath ? editorLanguage(selectedPath) : '일반 텍스트'}</span><span>Ctrl+S 저장 · Ctrl+Enter 실행 · Ctrl+F 찾기 · Ctrl+W 탭 닫기</span></div>
+                <div className="editor-statusbar"><span>WebLink 편집기</span><span>{selectedPath ? editorLanguage(selectedPath) : '일반 텍스트'}</span><span>Ctrl+P 파일 · Ctrl+Shift+F 전체 검색 · Ctrl+S 저장 · Ctrl+Enter 실행 · Ctrl+W 닫기</span></div>
               </section>
             </div>
+            <div hidden={workspaceSection !== 'code'}><ProjectChangeReview key={`${user.id}:${workspace.id}`} files={workspace.files} base={projectDraftSnapshot?.baseAnswers} version={projectDraftSnapshot?.version ?? workspace.draft_version} modelScope={`review/${user.id}/${workspace.id}`} dirty={projectDirty} paused={projectRecovery.paused} blocked={projectBusy || isProjectReadOnly || Boolean(projectRecovery.pending)} onPause={projectRecovery.pause} onResume={projectRecovery.resume} onOpen={navigateProjectFile} /></div>
             {versionPreview && <section className="version-preview" hidden={workspaceSection !== 'code'}><div><strong>v{versionPreview.version_number} · {versionPreview.name}</strong><button className="back-link" type="button" onClick={() => setVersionPreview(null)}>닫기</button></div><p>{versionPreview.description || `리비전 ${workspace.revisions.find((item) => item.id === versionPreview.source_revision_id)?.revision_number ?? ''}에서 저장한 읽기 전용 버전`}</p>{versionPreview.files.map((file) => <details key={file.path}><summary>{file.path}</summary><pre>{file.content}</pre></details>)}</section>}
           </main>
-        ) : <main className="learning-main"><p className="status">프로젝트를 여는 중…</p>{projectError && <p className="form-error" role="alert">{projectError}</p>}</main> : learningMode === 'studio' ? <LearningStudio key={user.id} userId={user.id} beforeLeaveRef={learningLeaveRef} onLegacy={() => setLearningMode('legacy')} onOpenProject={async (id, jump) => { setProjects(await projectService.list()); if (!await openProject(id, jump)) throw new Error('프로젝트를 열지 못했어요. 저장한 학습 코드는 유지됩니다. 다시 시도해 주세요.') }} /> : lessonLoading ? <main className="learning-main"><p className="status">수업을 준비하고 있어요…</p></main> : error && !lesson ? (
-          <main className="learning-main"><p className="form-error" role="alert">{error}</p></main>
+        ) : <main className="learning-main"><p className="status">프로젝트를 여는 중…</p>{projectError && <p className="form-error" role="alert">{projectError}</p>}</main> : learningMode === 'studio' ? <LearningStudio key={user.id} userId={user.id} initialPage={learningHomePage} beforeLeaveRef={learningLeaveRef} onLegacy={(course, lesson) => { setLegacyTarget({ course, lesson }); setLearningHomePage('records'); setLearningMode('legacy') }} onOpenProject={async (id, jump) => { setProjects(await projectService.list()); if (!await openProject(id, jump)) throw new Error('프로젝트를 열지 못했어요. 저장한 학습 코드는 유지됩니다. 다시 시도해 주세요.') }} /> : lessonLoading ? <main className="learning-main"><p className="status">이전 수업을 불러오고 있어요…</p><button type="button" onClick={() => setLearningMode('studio')}>← 학습 기록</button></main> : error && !lesson ? (
+          <main className="learning-main"><button type="button" onClick={() => setLearningMode('studio')}>← 학습 기록</button><p className="form-error" role="alert">{error}</p></main>
         ) : course && lesson ? (
           <main className="learning-main">
             <aside className="course-rail">
-              <button className="secondary-button" type="button" onClick={() => setLearningMode('studio')}>← 새 학습 과정</button>
-              <p className="eyebrow">학습 경로</p>
+              <button className="secondary-button" type="button" onClick={() => setLearningMode('studio')}>← 학습 기록</button>
+              <p className="eyebrow">이전 수업 보관함</p>
+              <p>이 수업의 답안과 완료 기록은 현재 미션 진도와 별도로 보관합니다.</p>
               <div className="course-picker" aria-label="학습 코스 목록">
                 {courses.map((item) => <button key={item.slug} type="button" className={item.slug === course.slug ? 'active' : ''} onClick={() => openCourse(item.slug)} disabled={lessonLoading} aria-current={item.slug === course.slug ? 'page' : undefined}>
                   <span>{item.title}</span><small>{item.completed_lessons}/{item.total_lessons} 완료</small>
@@ -3244,7 +3450,7 @@ export default function App() {
               </section>
             </article>
           </main>
-        ) : <main className="learning-main"><p>아직 공개된 수업이 없습니다.</p></main>}
+        ) : <main className="learning-main"><button type="button" onClick={() => setLearningMode('studio')}>← 학습 기록</button><p>보관된 이전 수업이 없습니다.</p></main>}
       </div>
     )
   }

@@ -57,7 +57,7 @@ class ProjectFilesImportRequest(BaseModel):
 
 class SaveDraftRequest(BaseModel):
     expected_version: int = Field(ge=0)
-    files: list[ProjectFileInput] = Field(min_length=1, max_length=50)
+    files: list[ProjectFileInput] = Field(max_length=50)
 
 
 class ProjectGitHubSourceResponse(BaseModel):

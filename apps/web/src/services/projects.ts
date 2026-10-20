@@ -75,17 +75,23 @@ export type RevisionResult = { revision: ProjectRevision; created: boolean }
 export type ProjectGitHubSource = { connected: boolean; token_connected: boolean; status_message: string | null; repository_url: string | null; branch: string | null; is_private: boolean; imported_sha: string | null; latest_sha: string | null; update_available: boolean }
 export type ProjectGitHubPullResult = { workspace: ProjectWorkspace; imported_sha: string; backup_version_name: string | null }
 
-async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
+export class ProjectRequestError extends Error {
+  constructor(message: string, public readonly status: number) { super(message); this.name = 'ProjectRequestError' }
+}
+
+async function request<T>(path: string, method = 'GET', body?: unknown, options?: { signal?: AbortSignal; headers?: Record<string, string> }): Promise<T> {
   let response: Response
   try {
     response = await sessionFetch(`${apiBaseUrl}/api/v1/projects${path}`, {
       method,
       credentials: 'include',
-      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+      signal: options?.signal,
+      headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...options?.headers },
       body: body === undefined ? undefined : JSON.stringify(body),
     })
   } catch {
-    throw new Error('WebLink API 요청이 브라우저에서 차단됐거나 서버에 연결하지 못했습니다. 서버 상태와 브라우저 연결 정책을 확인해 주세요.')
+    if (options?.signal?.aborted) throw new DOMException('요청 기다리기 중지', 'AbortError')
+    throw new ProjectRequestError('WebLink API 요청이 브라우저에서 차단됐거나 서버에 연결하지 못했습니다. 서버 상태와 브라우저 연결 정책을 확인해 주세요.', 0)
   }
   if (!response.ok) {
     const payload = await response.json().catch(() => null) as { detail?: unknown } | null
@@ -94,13 +100,15 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
       : Array.isArray(payload?.detail)
         ? payload.detail.map((item) => item && typeof item === 'object' && 'msg' in item ? String(item.msg) : '').filter(Boolean).join(' ')
         : ''
-    if (detail.includes('Draft changed')) throw new Error('초안이 다른 곳에서 변경됐습니다. 최신 초안을 불러온 뒤 내용을 확인하고 다시 시도해 주세요.')
+    if (response.status === 401) throw new ProjectRequestError('로그인이 만료되었어요. 같은 계정으로 다시 로그인한 뒤 저장해 주세요. 수정본을 내려받아 보관할 수도 있어요.', 401)
+    if (response.status === 403) throw new ProjectRequestError('현재 계정에는 이 작업의 권한이 없습니다. 저장 전 수정본은 내려받아 보관해 주세요.', 403)
+    if (detail.includes('Draft changed')) throw new ProjectRequestError('초안이 다른 곳에서 변경됐습니다. 최신 초안과 내 수정을 비교한 뒤 다시 저장해 주세요.', 409)
     if (detail.includes('safe relative path')) throw new Error('파일 경로는 프로젝트 폴더 안의 안전한 상대 경로여야 합니다.')
     if (detail.includes('duplicate file paths')) throw new Error('파일 경로가 중복되었습니다.')
     if (detail.includes('exceed 1 MB')) throw new Error('초안 파일 전체 크기는 1MB 이하여야 합니다.')
     if (detail.includes('at most 200000')) throw new Error('각 프로젝트 파일은 200,000자 이하여야 합니다.')
     if (detail.includes('at most 50')) throw new Error('프로젝트 파일은 50개 이하여야 합니다.')
-    throw new Error(detail || '프로젝트 요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.')
+    throw new ProjectRequestError(detail || '프로젝트 요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.', response.status)
   }
   if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
@@ -211,20 +219,20 @@ export const projectService = {
   async restoreVersion(projectId: string, versionId: string, expectedDraftVersion: number): Promise<{ restored_revision_id: string; restored_revision_number: number; draft_version: number }> {
     return request<{ restored_revision_id: string; restored_revision_number: number; draft_version: number }>(`/${projectId}/versions/${versionId}/restore`, 'POST', { expected_draft_version: expectedDraftVersion })
   },
-  async run(projectId: string, revisionId: string): Promise<RunResult> {
-    const response = await sessionFetch(`${apiBaseUrl}/api/v1/projects/${projectId}/runs`, {
-      method: 'POST', credentials: 'include',
-      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-      body: JSON.stringify({ revision_id: revisionId }),
-    })
-    if (!response.ok) throw new Error('실행 요청을 등록하지 못했습니다.')
-    return response.json() as Promise<RunResult>
+  async run(projectId: string, revisionId: string, idempotencyKey: string = crypto.randomUUID()): Promise<RunResult> {
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), 20000)
+    try {
+      return await request<RunResult>(`/${projectId}/runs`, 'POST', { revision_id: revisionId }, { signal: controller.signal, headers: { 'Idempotency-Key': idempotencyKey } })
+    } catch (cause) {
+      if (controller.signal.aborted || (cause instanceof ProjectRequestError && cause.status === 0)) throw new ProjectRequestError('실행 등록 응답을 확인하지 못했어요. 이미 등록됐을 수 있으니 실행 기록을 먼저 다시 읽어 주세요. 이 창에서 같은 코드를 다시 요청하면 같은 요청 키를 사용합니다.', 0)
+      throw cause
+    } finally { window.clearTimeout(timeout) }
   },
-  async getRun(projectId: string, runId: string): Promise<RunResult> {
-    const response = await sessionFetch(`${apiBaseUrl}/api/v1/projects/${projectId}/runs/${runId}`, { credentials: 'include' })
-    if (!response.ok) throw new Error('실행 결과를 불러오지 못했습니다.')
-    return response.json() as Promise<RunResult>
-  },
+  getRun: (projectId: string, runId: string, signal?: AbortSignal) =>
+    request<RunResult>(`/${projectId}/runs/${runId}`, 'GET', undefined, { signal }),
+  listRuns: async (projectId: string, signal?: AbortSignal) =>
+    (await request<{ runs: RunResult[] }>(`/${projectId}/runs`, 'GET', undefined, { signal })).runs,
   async saveDebugSession(projectId: string, runId: string, hypothesis: string, expected_output: string): Promise<DebugSession> {
     const response = await sessionFetch(`${apiBaseUrl}/api/v1/projects/${projectId}/runs/${runId}/debug-session`, {
       method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },

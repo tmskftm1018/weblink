@@ -160,6 +160,12 @@ class LearningProjectLinkRequest(BaseModel):
     project_id: UUID
 
 
+class LearningPathSaveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_version: int = Field(ge=0)
+    level: Literal["BEGINNER", "PRACTICED", "EXPERIENCED"] | None = None
+
+
 class LearningProjectSyncRequest(LearningProjectRequest):
     expected_draft_version: int = Field(ge=0)
     expected_project_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
