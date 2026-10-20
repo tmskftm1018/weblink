@@ -663,7 +663,14 @@ def import_project_archive(
     payload: ProjectCreateRequest,
     archive_data: bytes,
 ) -> ProjectWorkspaceResponse:
-    files = _validate_files(_read_project_archive(archive_data))
+    return create_project_from_files(db, user, payload, _read_project_archive(archive_data))
+
+
+def create_project_from_files(
+    db: Session, user: User, payload: ProjectCreateRequest,
+    source_files: list[ProjectFileInput], *, commit: bool = True,
+) -> ProjectWorkspaceResponse:
+    files = _validate_files(source_files)
     project = Project(owner_id=user.id, name=payload.name, description=payload.description)
     try:
         repository.add_project(db, project)
@@ -689,7 +696,9 @@ def import_project_archive(
                 created_by=user.id,
             )
         )
-        repository.save(db)
+        db.flush()
+        if commit:
+            repository.save(db)
         return get_workspace(db, user, project.id)
     except Exception:
         db.rollback()
@@ -745,7 +754,7 @@ def save_draft(
     )
 
 
-def create_revision(db: Session, user: User, project_id: UUID) -> CreateRevisionResponse:
+def create_revision(db: Session, user: User, project_id: UUID, *, commit: bool = True) -> CreateRevisionResponse:
     project, role = repository.get_access(db, project_id, user.id)
     if project is None:
         raise ProjectNotFound
@@ -768,6 +777,9 @@ def create_revision(db: Session, user: User, project_id: UUID) -> CreateRevision
         created_by=user.id,
     )
     db.add(revision)
-    repository.save(db)
+    if commit:
+        repository.save(db)
+    else:
+        db.flush()
     db.refresh(revision)
     return CreateRevisionResponse(revision=ProjectRevisionResponse.model_validate(revision), created=True)

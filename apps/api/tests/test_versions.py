@@ -38,7 +38,12 @@ def test_version_restore_creates_a_new_revision_and_restores_draft(client: TestC
     assert details.status_code == 200
     assert details.json()["files"] == project["files"]
 
-    restored = client.post(f"/api/v1/projects/{project_id}/versions/{version['id']}/restore")
+    restore_url = f"/api/v1/projects/{project_id}/versions/{version['id']}/restore"
+    stale_restore = client.post(restore_url, json={"expected_draft_version": 0})
+    assert stale_restore.status_code == 409
+    restored = client.post(
+        restore_url, json={"expected_draft_version": updated.json()["draft_version"]},
+    )
     assert restored.status_code == 200
     assert restored.json()["restored_revision_number"] == 3
     workspace = client.get(f"/api/v1/projects/{project_id}").json()

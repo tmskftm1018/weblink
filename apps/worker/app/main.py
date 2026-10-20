@@ -13,6 +13,7 @@ from requests.exceptions import Timeout
 from sqlalchemy import create_engine, text
 
 from app import config as settings
+from app.learning import process_next as process_learning_execution
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("weblink.worker")
@@ -336,12 +337,14 @@ def main() -> None:
     logger.info("Execution worker started: %s", worker_id)
     last_storage_cleanup = 0.0
     while True:
+        learning_processed = process_learning_execution(engine)
         if time.monotonic() - last_storage_cleanup >= 10:
             cleanup_project_storage()
             last_storage_cleanup = time.monotonic()
         job = claim_job()
         if job is None:
-            time.sleep(1)
+            if not learning_processed:
+                time.sleep(1)
             continue
         process(job)
 

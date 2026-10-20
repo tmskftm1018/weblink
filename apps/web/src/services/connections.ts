@@ -1,4 +1,6 @@
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+import { sessionFetch } from './session'
+
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 
 export type GoogleConnectionStatus = {
   configured: boolean
@@ -26,7 +28,7 @@ export type GoogleSheetValues = {
 }
 
 async function request<T>(path: string, method = 'GET'): Promise<T> {
-  const response = await fetch(`${apiBaseUrl}/api/v1/connections${path}`, { method, credentials: 'include' })
+  const response = await sessionFetch(`${apiBaseUrl}/api/v1/connections${path}`, { method, credentials: 'include' })
   if (!response.ok) {
     const payload = await response.json().catch(() => null) as { detail?: string } | null
     throw new Error(payload?.detail ?? '연결 요청을 처리하지 못했습니다.')
@@ -37,7 +39,7 @@ async function request<T>(path: string, method = 'GET'): Promise<T> {
 
 export const connectionService = {
   githubStatus: () => request<GitHubConnectionStatus>('/github'),
-  connectGitHub: (token: string) => fetch(`${apiBaseUrl}/api/v1/connections/github/token`, {
+  connectGitHub: (token: string) => sessionFetch(`${apiBaseUrl}/api/v1/connections/github/token`, {
     method: 'PUT',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },

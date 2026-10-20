@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     run_cpu_nanos: int = 500_000_000
     run_max_output_chars: int = 16_384
     worker_lease_seconds: int = 30
+    learning_runner_url: str | None = None
     gemini_api_key: str | None = None
     gemini_model: str = "gemini-3.5-flash-lite"
     google_oauth_client_id: str | None = None

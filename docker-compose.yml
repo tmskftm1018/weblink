@@ -3,7 +3,8 @@ services:
     build:
       context: ./apps/web
     environment:
-      VITE_API_BASE_URL: http://localhost:8000
+      VITE_API_BASE_URL: ""
+      API_PROXY_TARGET: http://api:8000
     ports:
       - "${WEB_PORT:-5173}:5173"
     depends_on:
@@ -14,6 +15,7 @@ services:
     build:
       context: ./apps/api
     environment:
+      LEARNING_RUNNER_URL: http://learning-runner:8001
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://weblink:change-me-for-local-development@postgres:5432/weblink}
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
       SESSION_DURATION_DAYS: ${SESSION_DURATION_DAYS:-7}
@@ -22,11 +24,11 @@ services:
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
       GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
       GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
-      GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-http://localhost:8000/api/v1/connections/google/oauth/callback}
+      GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-http://${LAN_HOST:-localhost}:8000/api/v1/connections/google/oauth/callback}
       GOOGLE_PICKER_API_KEY: ${GOOGLE_PICKER_API_KEY:-}
       GOOGLE_CLOUD_PROJECT_NUMBER: ${GOOGLE_CLOUD_PROJECT_NUMBER:-}
       CONNECTION_ENCRYPTION_KEY: ${CONNECTION_ENCRYPTION_KEY:-}
-      INVITE_WEB_BASE_URL: ${INVITE_WEB_BASE_URL:-http://localhost:5173}
+      INVITE_WEB_BASE_URL: ${INVITE_WEB_BASE_URL:-http://${LAN_HOST:-localhost}:5173}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
@@ -36,6 +38,9 @@ services:
       SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
     ports:
       - "${API_PORT:-8000}:8000"
+    networks:
+      - default
+      - learning-execution
     depends_on:
       postgres:
         condition: service_healthy
@@ -46,12 +51,32 @@ services:
       retries: 5
       start_period: 10s
 
+  learning-runner:
+    build:
+      context: ./apps/learning-runner
+    init: true
+    user: "10001:10001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 256m
+    memswap_limit: 256m
+    cpus: 0.5
+    pids_limit: 32
+    networks: [learning-execution]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import quickjs, urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=2)"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+
   worker:
     build:
       context: ./apps/worker
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://weblink:change-me-for-local-development@postgres:5432/weblink}
       RUNTIME_IMAGE: weblink-python-runtime:local
+      LEARNING_API_IMAGE: weblink-learning-api-runtime:local
       RUN_TIMEOUT_SECONDS: ${RUN_TIMEOUT_SECONDS:-8}
       RUN_MEMORY_MB: ${RUN_MEMORY_MB:-96}
       RUN_CPU_NANOS: ${RUN_CPU_NANOS:-500000000}
@@ -69,6 +94,8 @@ services:
         condition: service_healthy
       runtime-image:
         condition: service_completed_successfully
+      learning-api-image:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "uv", "run", "--no-sync", "python", "-m", "app.healthcheck"]
       interval: 15s
@@ -83,6 +110,14 @@ services:
     command: ["true"]
     restart: "no"
 
+  learning-api-image:
+    image: weblink-learning-api-runtime:local
+    build:
+      context: .
+      dockerfile: infrastructure/learning-python/Dockerfile
+    command: ["true"]
+    restart: "no"
+
   postgres:
     image: postgres:16-alpine
     environment:
@@ -90,7 +125,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-weblink}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-for-local-development}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -120,3 +155,8 @@ services:
 volumes:
   postgres_data:
   object_storage_data:
+
+networks:
+  default: {}
+  learning-execution:
+    internal: true

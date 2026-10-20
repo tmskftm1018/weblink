@@ -1,6 +1,7 @@
 import { FormEvent, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { authService, User } from '../services/auth'
-import { AttemptResult, Course, Lesson, learningService } from '../services/learning'
+import { sessionExpiredEvent } from '../services/session'
+import { AttemptResult, Course, Lesson, ProjectJump, learningService } from '../services/learning'
 import { connectionService, GitHubConnectionStatus, GoogleConnectionStatus, GoogleSheetValues } from '../services/connections'
 import { ManagedProjectInvitation, ProjectGitHubSource, ProjectMember, ProjectSummary, ProjectTask, ProjectTaskActivity, TaskChecklistItem, ProjectTaskPriority, ProjectTaskStatus, ProjectTeamActivity, ProjectVersion, ProjectVersionDetails, ProjectWorkspace, TaskDiscussion, projectService } from '../services/projects'
 import { bindProjectDirectory, chooseProjectDirectory, getProjectDirectory, moveProjectFileInDirectory, moveProjectFilesInDirectory, ProjectDirectory, readProjectDirectory, removeEmptyProjectDirectoryFromDirectory, removeProjectFileFromDirectory, unbindProjectDirectory, writeProjectDirectory } from '../services/localProjects'
@@ -9,12 +10,14 @@ import { pickGoogleDriveFiles } from '../services/googleDrivePicker'
 import ProjectFileTree, { buildProjectFileTree } from './ProjectFileTree'
 import ProjectReadmePreview from './ProjectReadmePreview'
 import LandingPage from './LandingPage'
+import BlockExercise from './BlockExercise'
+import LearningStudio from './LearningStudio'
 
 type Mode = 'login' | 'signup'
 type View = 'lesson' | 'projects' | 'workspace' | 'connections'
 type ProjectWorkspaceSection = 'overview' | 'code' | 'tasks' | 'team' | 'storage'
 type NewProjectEntryKind = 'auto' | 'file' | 'folder'
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 const taskColumns: Array<{ status: ProjectTaskStatus; label: string }> = [
   { status: 'TODO', label: '할 일' },
   { status: 'IN_PROGRESS', label: '진행 중' },
@@ -89,6 +92,7 @@ function extractGoogleSpreadsheetId(value: string): string | null {
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null)
+  const [sessionExpired, setSessionExpired] = useState(false)
   const [mode, setMode] = useState<Mode>('signup')
   const [showLanding, setShowLanding] = useState(true)
   const [loading, setLoading] = useState(true)
@@ -101,6 +105,8 @@ export default function App() {
   const [attemptResult, setAttemptResult] = useState<AttemptResult | null>(null)
   const [assembledBlocks, setAssembledBlocks] = useState<string[]>([])
   const [view, setView] = useState<View>('lesson')
+  const [learningMode, setLearningMode] = useState<'studio' | 'legacy'>('studio')
+  const learningLeaveRef = useRef<(() => Promise<boolean>) | null>(null)
   const [googleConnection, setGoogleConnection] = useState<GoogleConnectionStatus | null>(null)
   const [githubConnection, setGithubConnection] = useState<GitHubConnectionStatus | null>(null)
   const [githubToken, setGithubToken] = useState('')
@@ -167,6 +173,7 @@ export default function App() {
   const [projectVersions, setProjectVersions] = useState<ProjectVersion[]>([])
   const [versionPreview, setVersionPreview] = useState<ProjectVersionDetails | null>(null)
   const [selectedPath, setSelectedPath] = useState('')
+  const [editorJump, setEditorJump] = useState<{ path: string; line: number } | null>(null)
   const [openFilePaths, setOpenFilePaths] = useState<string[]>([])
   const [newProjectName, setNewProjectName] = useState('')
   const [newProjectDescription, setNewProjectDescription] = useState('')
@@ -243,6 +250,16 @@ export default function App() {
 
   useEffect(() => {
     authService.me().then(setUser).catch(() => setUser(null)).finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    function requireLogin() {
+      setSessionExpired(true)
+      setMode('login')
+      setShowLanding(false)
+    }
+    window.addEventListener(sessionExpiredEvent, requireLogin)
+    return () => window.removeEventListener(sessionExpiredEvent, requireLogin)
   }, [])
 
   useEffect(() => {
@@ -502,7 +519,7 @@ export default function App() {
   }, [view, workspace?.id, user?.id, taskActivityOpen])
 
   useEffect(() => {
-    setWorkspaceSection('overview')
+    setWorkspaceSection(editorJump ? 'code' : 'overview')
     setOpenTaskDiscussionId(null)
     setTaskDiscussions({})
     setTaskChecklists({})
@@ -548,7 +565,7 @@ export default function App() {
   }, [view, workspace, projectBusy, projectDirty, selectedPath, openFilePaths, saveProjectDraft, runProject])
 
   useEffect(() => {
-    if (!user) return
+    if (!user || learningMode !== 'legacy') return
     let cancelled = false
     setLessonLoading(true)
     learningService.courses()
@@ -567,7 +584,7 @@ export default function App() {
       })
       .finally(() => { if (!cancelled) setLessonLoading(false) })
     return () => { cancelled = true }
-  }, [user])
+  }, [user, learningMode])
 
   useEffect(() => {
     let cancelled = false
@@ -592,10 +609,15 @@ export default function App() {
     const email = String(form.get('email') ?? '')
     const password = String(form.get('password') ?? '')
     try {
+      if (sessionExpired && user && email.trim().toLocaleLowerCase() !== user.email.toLocaleLowerCase()) {
+        throw new Error('작성 중인 내용을 이어가려면 기존 계정으로 다시 로그인해 주세요.')
+      }
       const authenticatedUser = mode === 'signup'
         ? await authService.signup({ email, password, display_name: String(form.get('display_name') ?? '') })
         : await authService.login({ email, password })
       setUser(authenticatedUser)
+      setSessionExpired(false)
+      setError('')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '인증 중 오류가 발생했습니다.')
     } finally {
@@ -604,6 +626,7 @@ export default function App() {
   }
 
   async function handleLogout() {
+    if (learningLeaveRef.current && !await learningLeaveRef.current()) return
     await authService.logout()
     setUser(null)
     setMode('login')
@@ -630,6 +653,7 @@ export default function App() {
   }
 
   async function showProjects() {
+    if (learningLeaveRef.current && !await learningLeaveRef.current()) return
     if (view === 'workspace' && projectDirty && workspace) {
       if (projectAccessLost) {
         if (!window.confirm('프로젝트 접근 권한이 없어 수정 내용을 저장할 수 없습니다. 필요한 코드를 복사해 두었나요? 프로젝트 목록으로 이동할까요?')) return
@@ -669,6 +693,7 @@ export default function App() {
   }
 
   async function showConnections() {
+    if (learningLeaveRef.current && !await learningLeaveRef.current()) return
     if (view === 'workspace' && projectDirty && workspace) {
       setProjectBusy(true)
       try {
@@ -1285,7 +1310,7 @@ export default function App() {
     }
   }
 
-  async function openProject(projectId: string) {
+  async function openProject(projectId: string, jump?: ProjectJump) {
     setProjectBusy(true)
     setProjectError('')
     setProjectNotice('')
@@ -1312,13 +1337,19 @@ export default function App() {
       setPendingProjectDirectory(null)
       setProjectVersions(versions)
       setVersionPreview(null)
-      resetProjectFiles(loaded.files[0]?.path ?? '')
+      const targetPath = loaded.files.find(file => file.path === jump?.file_path)?.path ?? loaded.files[0]?.path ?? ''
+      resetProjectFiles(targetPath)
+      setEditorJump(jump?.file_path ? { path: targetPath, line: targetPath === jump.file_path ? jump.cursor_line ?? 1 : 1 } : null)
+      if (jump?.file_path) { setWorkspaceSection('code'); if (targetPath !== jump.file_path) setProjectNotice('원래 파일은 최신 프로젝트에 없어 첫 파일을 열었습니다. 학습 화면에서 당시 코드 버전을 확인할 수 있어요.') }
+      if (jump?.notice) setProjectNotice(current => current ? `${current} ${jump.notice}` : jump.notice ?? '')
       setProjectDirty(false)
       setProjectNeedsReload(false)
       setView('workspace')
       void projectService.githubSource(projectId).then((source) => { if (workspaceRef.current?.id === projectId) setGithubSource(source) }).catch(() => undefined)
+      return true
     } catch (cause) {
       setProjectError(cause instanceof Error ? cause.message : '프로젝트를 열지 못했습니다.')
+      return false
     } finally {
       setProjectBusy(false)
     }
@@ -1350,6 +1381,7 @@ export default function App() {
   }
 
   function openProjectFile(path: string) {
+    setEditorJump(null)
     setSelectedPath(path)
     setOpenFilePaths((current) => current.includes(path) ? current : [...current, path])
   }
@@ -2790,11 +2822,11 @@ export default function App() {
 
   if (showLanding) return <LandingPage isAuthenticated={Boolean(user)} onEnter={(nextMode) => { setMode(nextMode); setError(''); setShowLanding(false) }} />
 
-  if (user) {
+  if (user && !sessionExpired) {
     return (
       <div className="learning-shell">
         <header className="learning-topbar">
-          <button className="topbar-brand" type="button" onClick={() => setShowLanding(true)} aria-label="WebLink 홈페이지"><div className="brand-mark small" aria-hidden="true">W</div><span>WebLink</span></button>
+          <button className="topbar-brand" type="button" onClick={async () => { if (learningLeaveRef.current && !await learningLeaveRef.current()) return; setShowLanding(true) }} aria-label="WebLink 홈페이지"><div className="brand-mark small" aria-hidden="true">W</div><span>WebLink</span></button>
           <nav className="topbar-nav" aria-label="주요 메뉴">
             <button className={view === 'lesson' ? 'active' : ''} type="button" onClick={showLesson} disabled={projectBusy}>배우기</button>
             <button className={view === 'projects' || view === 'workspace' ? 'active' : ''} type="button" onClick={showProjects} disabled={projectBusy}>내 프로젝트</button>
@@ -3134,18 +3166,19 @@ export default function App() {
                 </div>
                 <div className="editor-toolbar"><span>{selectedPath || '파일을 선택해 주세요'}</span><span>{projectDirty ? '변경됨' : '저장됨'}</span></div>
                 <div className="monaco-editor-container">
-                  {selectedPath ? <Suspense fallback={<div className="editor-empty">VS Code 편집기를 불러오는 중…</div>}><MonacoCodeEditor path={selectedPath} value={workspace.files.find((file) => file.path === selectedPath)?.content ?? ''} readOnly={projectBusy || isProjectReadOnly} onChange={(value) => updateProjectFile(value)} /></Suspense> : <div className="editor-empty">왼쪽에서 파일을 선택하거나 새 파일을 추가하세요.</div>}
+                  {selectedPath ? <Suspense fallback={<div className="editor-empty">VS Code 편집기를 불러오는 중…</div>}><MonacoCodeEditor path={selectedPath} initialLine={editorJump?.path === selectedPath ? editorJump.line : undefined} value={workspace.files.find((file) => file.path === selectedPath)?.content ?? ''} readOnly={projectBusy || isProjectReadOnly} onChange={(value) => updateProjectFile(value)} /></Suspense> : <div className="editor-empty">왼쪽에서 파일을 선택하거나 새 파일을 추가하세요.</div>}
                 </div>
                 <div className="editor-statusbar"><span>WebLink 편집기</span><span>{selectedPath ? editorLanguage(selectedPath) : '일반 텍스트'}</span><span>Ctrl+S 저장 · Ctrl+Enter 실행 · Ctrl+F 찾기 · Ctrl+W 탭 닫기</span></div>
               </section>
             </div>
             {versionPreview && <section className="version-preview" hidden={workspaceSection !== 'code'}><div><strong>v{versionPreview.version_number} · {versionPreview.name}</strong><button className="back-link" type="button" onClick={() => setVersionPreview(null)}>닫기</button></div><p>{versionPreview.description || `리비전 ${workspace.revisions.find((item) => item.id === versionPreview.source_revision_id)?.revision_number ?? ''}에서 저장한 읽기 전용 버전`}</p>{versionPreview.files.map((file) => <details key={file.path}><summary>{file.path}</summary><pre>{file.content}</pre></details>)}</section>}
           </main>
-        ) : <main className="learning-main"><p className="status">프로젝트를 여는 중…</p>{projectError && <p className="form-error" role="alert">{projectError}</p>}</main> : lessonLoading ? <main className="learning-main"><p className="status">수업을 준비하고 있어요…</p></main> : error && !lesson ? (
+        ) : <main className="learning-main"><p className="status">프로젝트를 여는 중…</p>{projectError && <p className="form-error" role="alert">{projectError}</p>}</main> : learningMode === 'studio' ? <LearningStudio key={user.id} userId={user.id} beforeLeaveRef={learningLeaveRef} onLegacy={() => setLearningMode('legacy')} onOpenProject={async (id, jump) => { setProjects(await projectService.list()); if (!await openProject(id, jump)) throw new Error('프로젝트를 열지 못했어요. 저장한 학습 코드는 유지됩니다. 다시 시도해 주세요.') }} /> : lessonLoading ? <main className="learning-main"><p className="status">수업을 준비하고 있어요…</p></main> : error && !lesson ? (
           <main className="learning-main"><p className="form-error" role="alert">{error}</p></main>
         ) : course && lesson ? (
           <main className="learning-main">
             <aside className="course-rail">
+              <button className="secondary-button" type="button" onClick={() => setLearningMode('studio')}>← 새 학습 과정</button>
               <p className="eyebrow">학습 경로</p>
               <div className="course-picker" aria-label="학습 코스 목록">
                 {courses.map((item) => <button key={item.slug} type="button" className={item.slug === course.slug ? 'active' : ''} onClick={() => openCourse(item.slug)} disabled={lessonLoading} aria-current={item.slug === course.slug ? 'page' : undefined}>
@@ -3187,40 +3220,13 @@ export default function App() {
                 <form className="answer-form" onSubmit={handleAttempt}>
                   {lesson.content.block_activity ? (
                     <section className="block-activity" aria-label="블록 코딩 활동">
-                      <p className="block-instruction">{lesson.content.block_activity.instruction}</p>
-                      <div className="block-goal"><span>만들 결과</span><strong>{lesson.content.block_activity.expected_output}</strong></div>
-                      <div className="block-workbench">
-                        <div className="block-palette">
-                          <h3>사용할 블록</h3>
-                          <p>블록을 눌러 코드 영역에 쌓아 보세요.</p>
-                            {blockPalette.map((block) => {
-                              const isUsed = assembledBlocks.includes(block.id)
-                              return <button className={`code-block${isUsed ? ' used' : ''}`} key={block.id} type="button" onClick={() => addBlock(block.id)} disabled={submitting || isUsed} aria-pressed={isUsed}>
-                            <strong className="code-block-title">{block.label}{isUsed && <span className="block-used-badge">✓ 사용함</span>}</strong><code>{block.code.split('\n').join('↵')}</code><small>{block.description}</small>
-                          </button>
-                            })}
-                        </div>
-                        <div className="block-stack-panel">
-                          <h3>내 코드 블록 <span>{assembledBlocks.length}개</span></h3>
-                          <ol className="block-stack">
-                            {assembledBlocks.map((blockId, index) => {
-                              const block = lesson.content.block_activity?.blocks.find((item) => item.id === blockId)
-                              return block ? <li className="stacked-block" key={`${blockId}-${index}`}>
-                                <span className="stack-order">{index + 1}</span>
-                                <div><strong>{block.label}</strong><code>{block.code.split('\n').join('↵')}</code></div>
-                                <div className="stack-controls"><button type="button" aria-label={`${block.label} 위로`} onClick={() => moveBlock(index, -1)} disabled={index === 0 || submitting}>↑</button><button type="button" aria-label={`${block.label} 아래로`} onClick={() => moveBlock(index, 1)} disabled={index === assembledBlocks.length - 1 || submitting}>↓</button><button type="button" aria-label={`${block.label} 제거`} onClick={() => removeBlock(index)} disabled={submitting}>×</button></div>
-                              </li> : null
-                            })}
-                            {!assembledBlocks.length && <li className="stack-empty">여기에 블록을 쌓아 코드를 만들어 보세요.</li>}
-                          </ol>
-                          <h3>완성되는 파이썬 코드</h3>
-                          <pre className="assembled-code">{assembledBlocks.map((id) => lesson.content.block_activity?.blocks.find((block) => block.id === id)?.code ?? '').join('') || '# 블록을 쌓으면 코드가 여기에 나타나요'}</pre>
-                        </div>
-                      </div>
+                      <BlockExercise key={lesson.id} activity={lesson.content.block_activity} palette={blockPalette}
+                        selectedIds={assembledBlocks} disabled={submitting}
+                        onAdd={addBlock} onMove={moveBlock} onRemove={removeBlock} />
                       {error && <p className="form-error" role="alert">{error}</p>}
                       {attemptResult && <div className="block-feedback" role="status"><p className={attemptResult.feedback.input.correct ? 'answer-feedback good' : 'answer-feedback'}>{attemptResult.feedback.input.message}</p><p className={attemptResult.feedback.process.correct ? 'answer-feedback good' : 'answer-feedback'}>{attemptResult.feedback.process.message}</p></div>}
-                      {attemptResult?.completed && <><p className="completion-message" role="status">좋아요! 블록이 실제 파이썬 코드로 연결되는 것을 확인했어요.</p><button className="primary-button" type="button" onClick={continueInProject} disabled={projectBusy}>{projectBusy ? '프로젝트를 준비하고 있어요…' : '내 프로젝트에서 이어 만들기'}</button></>}
-                      {!attemptResult?.completed && <button className="primary-button" type="submit" disabled={submitting}>{submitting ? '블록을 확인하고 있어요…' : '블록 순서 확인하기'}</button>}
+                      {attemptResult?.completed && <><p className="completion-message" role="status">조립한 답안을 확인했어요. 프로젝트에서 실행하고 예상한 결과와 비교해 보세요.</p><button className="primary-button" type="button" onClick={continueInProject} disabled={projectBusy}>{projectBusy ? '프로젝트를 준비하고 있어요…' : '내 프로젝트에서 이어 만들기'}</button></>}
+                      {!attemptResult?.completed && <button className="primary-button" type="submit" disabled={submitting || !assembledBlocks.length}>{submitting ? '답안을 확인하고 있어요…' : '조립한 답안 확인하기'}</button>}
                     </section>
                   ) : <>
                     {lesson.content.prompts.map((prompt) => (
@@ -3250,11 +3256,12 @@ export default function App() {
       <p className="eyebrow">LEARN BY BUILDING</p>
       <h1>{mode === 'signup' ? '배우고, 만들고, 이해해요.' : '다시 만나 반가워요.'}</h1>
       <p className="intro">WebLink에서 소프트웨어를 직접 만들며 배워 보세요.</p>
+      {sessionExpired && <p className="session-notice" role="status">로그인 세션이 만료되었거나 인증 정보를 확인하지 못했어요. 기존 계정으로 다시 로그인해 주세요. 이 창의 작성 내용은 유지되지만, 새로고침하면 저장하지 않은 내용이 사라질 수 있어요.</p>}
       <form className="auth-form" onSubmit={handleSubmit}>
         {mode === 'signup' && (
           <label>이름<input name="display_name" type="text" autoComplete="name" required maxLength={80} /></label>
         )}
-        <label>이메일<input name="email" type="email" autoComplete="email" required maxLength={320} /></label>
+        <label>이메일<input name="email" type="email" autoComplete="email" defaultValue={sessionExpired ? user?.email : ''} required maxLength={320} /></label>
         <label>비밀번호<input name="password" type="password" autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} required minLength={12} maxLength={128} /></label>
         {mode === 'signup' && <p className="form-hint">비밀번호는 12자 이상으로 설정해 주세요.</p>}
         {error && <p className="form-error" role="alert">{error}</p>}
@@ -3262,12 +3269,12 @@ export default function App() {
           {submitting ? '잠시만요…' : mode === 'signup' ? '계정 만들기' : '로그인'}
         </button>
       </form>
-      <p className="switch-mode">
+      {!sessionExpired && <p className="switch-mode">
         {mode === 'signup' ? '이미 계정이 있나요?' : '처음이신가요?'}{' '}
         <button type="button" onClick={() => { setError(''); setMode(mode === 'signup' ? 'login' : 'signup') }}>
           {mode === 'signup' ? '로그인' : '계정 만들기'}
         </button>
-      </p>
+      </p>}
       <p className="status"><span /> 배우는 과정을 프로젝트로 연결해요</p>
     </main>
   )

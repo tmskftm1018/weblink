@@ -1,4 +1,6 @@
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+import { sessionFetch } from './session'
+
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 export type RunResult = {
   id: string; project_id: string; revision_id: string
   status: 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED'
@@ -76,7 +78,7 @@ export type ProjectGitHubPullResult = { workspace: ProjectWorkspace; imported_sh
 async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   let response: Response
   try {
-    response = await fetch(`${apiBaseUrl}/api/v1/projects${path}`, {
+    response = await sessionFetch(`${apiBaseUrl}/api/v1/projects${path}`, {
       method,
       credentials: 'include',
       headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
@@ -147,7 +149,7 @@ export const projectService = {
   removeMember: (projectId: string, userId: string) =>
     request<void>(`/${projectId}/members/${userId}`, 'DELETE'),
   async exportArchive(projectId: string, projectName: string): Promise<void> {
-    const response = await fetch(`${apiBaseUrl}/api/v1/projects/${projectId}/export`, { credentials: 'include' })
+    const response = await sessionFetch(`${apiBaseUrl}/api/v1/projects/${projectId}/export`, { credentials: 'include' })
     if (!response.ok) {
       const payload = await response.json().catch(() => null) as { detail?: string } | null
       throw new Error(payload?.detail ?? '프로젝트 파일을 내려받지 못했습니다.')
@@ -167,7 +169,7 @@ export const projectService = {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000)
   },
   async importArchive(projectName: string, file: File): Promise<ProjectWorkspace> {
-    const response = await fetch(`${apiBaseUrl}/api/v1/projects/import?name=${encodeURIComponent(projectName)}`, {
+    const response = await sessionFetch(`${apiBaseUrl}/api/v1/projects/import?name=${encodeURIComponent(projectName)}`, {
       method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/zip' }, body: file,
     })
     if (!response.ok) {
@@ -179,7 +181,7 @@ export const projectService = {
   },
   async importGithubRepository(projectName: string, repositoryUrl: string): Promise<ProjectWorkspace> {
     const query = new URLSearchParams({ name: projectName, repository_url: repositoryUrl })
-    const response = await fetch(`${apiBaseUrl}/api/v1/projects/import/github?${query}`, { method: 'POST', credentials: 'include' })
+    const response = await sessionFetch(`${apiBaseUrl}/api/v1/projects/import/github?${query}`, { method: 'POST', credentials: 'include' })
     if (!response.ok) {
       const payload = await response.json().catch(() => null) as { detail?: string } | null
       throw new Error(payload?.detail ?? 'GitHub 저장소를 가져오지 못했습니다.')
@@ -210,7 +212,7 @@ export const projectService = {
     return request<{ restored_revision_id: string; restored_revision_number: number; draft_version: number }>(`/${projectId}/versions/${versionId}/restore`, 'POST', { expected_draft_version: expectedDraftVersion })
   },
   async run(projectId: string, revisionId: string): Promise<RunResult> {
-    const response = await fetch(`${apiBaseUrl}/api/v1/projects/${projectId}/runs`, {
+    const response = await sessionFetch(`${apiBaseUrl}/api/v1/projects/${projectId}/runs`, {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
       body: JSON.stringify({ revision_id: revisionId }),
@@ -219,12 +221,12 @@ export const projectService = {
     return response.json() as Promise<RunResult>
   },
   async getRun(projectId: string, runId: string): Promise<RunResult> {
-    const response = await fetch(`${apiBaseUrl}/api/v1/projects/${projectId}/runs/${runId}`, { credentials: 'include' })
+    const response = await sessionFetch(`${apiBaseUrl}/api/v1/projects/${projectId}/runs/${runId}`, { credentials: 'include' })
     if (!response.ok) throw new Error('실행 결과를 불러오지 못했습니다.')
     return response.json() as Promise<RunResult>
   },
   async saveDebugSession(projectId: string, runId: string, hypothesis: string, expected_output: string): Promise<DebugSession> {
-    const response = await fetch(`${apiBaseUrl}/api/v1/projects/${projectId}/runs/${runId}/debug-session`, {
+    const response = await sessionFetch(`${apiBaseUrl}/api/v1/projects/${projectId}/runs/${runId}/debug-session`, {
       method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ hypothesis, expected_output }),
     })
@@ -232,7 +234,7 @@ export const projectService = {
     return response.json() as Promise<DebugSession>
   },
   async requestDebugHint(projectId: string, runId: string, hypothesis: string, expected_output: string): Promise<DebugHint> {
-    const response = await fetch(`${apiBaseUrl}/api/v1/projects/${projectId}/runs/${runId}/ai/debug-hint`, {
+    const response = await sessionFetch(`${apiBaseUrl}/api/v1/projects/${projectId}/runs/${runId}/ai/debug-hint`, {
       method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ hypothesis, expected_output }),
     })
