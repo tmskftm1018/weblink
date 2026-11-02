@@ -1,28 +1,13 @@
 import { BrowserDraft } from './browserDrafts'
 import { ProjectFile } from './projects'
+import { compareAnswerRecovery } from './answerRecovery'
+export { sameAnswers as sameFiles } from './answerRecovery'
+export type { RecoveryChange } from './answerRecovery'
 
 export const projectRecoveryKey = (userId: string, projectId: string) => `weblink.project-draft:${userId}:${projectId}`
 export const fileContents = (files: ProjectFile[]) => Object.fromEntries(files.map(file => [file.path, file.content]))
-export const sameFiles = (left: Record<string, string>, right: Record<string, string>) => {
-  const keys = Object.keys(left)
-  return keys.length === Object.keys(right).length && keys.every(key => Object.prototype.hasOwnProperty.call(right, key) && left[key] === right[key])
-}
-
-export type RecoveryChange = { path: string; base: string | null; local: string | null; server: string | null; conflict: boolean; selected: 'local' | 'server' }
-export function compareProjectRecovery(draft: BrowserDraft, files: ProjectFile[]): RecoveryChange[] {
-  const base = new Map(Object.entries(draft.baseAnswers ?? {}))
-  const local = new Map(Object.entries(draft.answers))
-  const server = new Map(files.map(file => [file.path, file.content]))
-  return [...new Set([...base.keys(), ...local.keys(), ...server.keys()])].sort().map(path => {
-    const original = base.get(path) ?? null
-    const mine = local.get(path) ?? null
-    const theirs = server.get(path) ?? null
-    const changedLocal = original !== mine
-    const changedServer = original !== theirs
-    return { path, base: original, local: mine, server: theirs,
-      conflict: mine !== theirs && (!draft.baseAnswers || (changedLocal && changedServer)),
-      selected: changedLocal ? 'local' : 'server' }
-  })
+export function compareProjectRecovery(draft: BrowserDraft, files: ProjectFile[]) {
+  return compareAnswerRecovery(draft, fileContents(files))
 }
 
 export function validateRecoveryFiles(files: ProjectFile[]): string | null {

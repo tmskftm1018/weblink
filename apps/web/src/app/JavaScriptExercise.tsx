@@ -1,5 +1,6 @@
 import { Suspense, lazy, useState } from 'react'
 import { JavaScriptReport } from '../services/learning'
+import LearningExecutionDetails from './LearningExecutionDetails'
 
 const Editor = lazy(() => import('./MonacoCodeEditor'))
 const states: Record<string, string> = { COMPLETED: '실행 완료', CODE_ERROR: '코드 오류', LIMIT_EXCEEDED: '실행 한도 초과', UNAVAILABLE: '실행기 사용 불가' }
@@ -29,7 +30,7 @@ export default function JavaScriptExercise({ value, starter, path, disabled, onC
     }}>JavaScript 파일 내려받기</button></div>
     {error && <p role="alert">{error}</p>}
     {report && !resultHidden && value !== executedSource && <p role="status">실행 후 코드가 바뀌었어요. 아래 결과는 이전 코드의 결과입니다. 다시 실행해 비교하세요.</p>}
-    {report && resultHidden && <button type="button" onClick={() => setResultHidden(false)}>마지막 실행 결과 다시 펼치기 · 새 실행 없음</button>}{report && !resultHidden && <section className="learning-js-report" aria-live="polite"><button type="button" className="learning-result-close" onClick={() => setResultHidden(true)}>실행 결과 닫기</button><h4>{states[report.status] ?? report.status} · 저장본 v{report.work_version}</h4><p>{report.scope}</p>{report.error && <pre>{report.error}</pre>}{report.status === 'UNAVAILABLE' && <p>오답으로 판정하지 않았어요. 실행기를 사용할 수 있을 때 다시 시도하세요.</p>}{report.cases?.length > 0 && <div className="learning-js-cases">{report.cases.map((row, index) => <section key={index}><h5>입력 {index + 1} · <code>{JSON.stringify(row.title)}</code></h5><dl><dt>기본 제출 중단</dt><dd>{row.prevented ? '예' : '아니요'}</dd><dt>저장 호출</dt><dd><code>{row.calls.length ? JSON.stringify(row.calls) : '없음'}</code></dd><dt>오류 안내</dt><dd>{row.error || '(없음)'}</dd><dt>입력칸의 값</dt><dd><code>{JSON.stringify(row.input)}</code></dd></dl></section>)}</div>}<p>실행과 미션 제출은 별개예요. 결과를 관찰해 설명을 작성한 뒤 아래에서 저장·제출하세요.</p></section>}
+    {report && resultHidden && <button type="button" onClick={() => setResultHidden(false)}>마지막 실행 결과 다시 펼치기 · 새 실행 없음</button>}{report && !resultHidden && <section className="learning-js-report" aria-live="polite"><button type="button" className="learning-result-close" onClick={() => setResultHidden(true)}>실행 결과 닫기</button><h4>{states[report.status] ?? report.status} · 저장본 v{report.work_version}</h4><p>{report.scope}</p><LearningExecutionDetails report={report} /><p>실행과 미션 제출은 별개예요. 결과를 확인하고 수업의 필수 항목을 채운 뒤 아래에서 실습 확인 버튼을 누르세요.</p></section>}
     <details><summary>처음 제공한 코드 보기</summary><pre>{starter}</pre></details>
   </div>
 }

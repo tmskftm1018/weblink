@@ -138,6 +138,7 @@ class LearningMissionWork(Base):
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     retrieved_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     answers: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    assignment: Mapped[dict | None] = mapped_column(JSON)
     source_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     submitted_hash: Mapped[str | None] = mapped_column(String(64))
     feedback: Mapped[dict | None] = mapped_column(JSON)

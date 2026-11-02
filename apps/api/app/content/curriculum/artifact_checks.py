@@ -104,9 +104,9 @@ def fields_for(node: dict) -> list[dict]:
     ])
 
 
-def evaluate(node: dict, answers: dict[str, str], *, reopened: bool) -> dict:
+def evaluate(node: dict, answers: dict[str, str], *, reopened: bool, fields: list[dict] | None = None) -> dict:
     issues: dict[str, str] = {}
-    for field in fields_for(node):
+    for field in fields if fields is not None else fields_for(node):
         value = answers.get(field["id"], "").strip()
         if field["kind"] == "choice":
             if value not in field["choices"]:
@@ -121,7 +121,7 @@ def evaluate(node: dict, answers: dict[str, str], *, reopened: bool) -> dict:
         for key, correct in ROLE_ANSWERS.items():
             if answers.get(key) != correct:
                 issues[key] = "UI, API, DB가 각각 맡는 책임을 다시 살펴보세요."
-        if answers.get("requirement_create", "").strip() == answers.get("requirement_list", "").strip():
+        if any(field["id"] == "requirement_create" for field in (fields if fields is not None else fields_for(node))) and answers.get("requirement_create", "").strip() == answers.get("requirement_list", "").strip():
             issues["requirement_list"] = "등록과 목록 보기의 요구사항을 구분해서 작성해 주세요."
     recommendation = None
     checks = []

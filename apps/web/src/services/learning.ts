@@ -1,4 +1,5 @@
 import { sessionFetch } from './session'
+import { learningValidationMessage } from './learningErrors'
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 
@@ -62,6 +63,8 @@ async function request<T>(path: string, body?: unknown, method?: string, signal?
     if (response.status === 401) throw new LearningRequestError('로그인이 만료되었어요. 같은 계정으로 다시 로그인한 뒤 저장해 주세요.', 401)
     if (response.status === 409) throw new LearningRequestError(typeof detail === 'string' ? detail : '다른 창에서 답안이 바뀌었어요. 최신 저장본과 비교해 주세요.', 409)
     if (typeof detail === 'string') throw new LearningRequestError(detail, response.status)
+    const validation = learningValidationMessage(path, detail)
+    if (validation) throw new LearningRequestError(validation, response.status)
     if (Array.isArray(detail)) {
       const issue = detail.find((item) => item && typeof item === 'object') as { type?: string; loc?: unknown[]; msg?: string } | undefined
       if (issue?.type === 'string_too_long' && issue.loc?.includes('process')) {
@@ -82,22 +85,41 @@ export type Curriculum = {
 }
 export type Enrollment = { id: string; course_key: string; current_node_id: string | null }
 export type LearningLevel = 'BEGINNER' | 'PRACTICED' | 'EXPERIENCED'
+export type LearningSubjectId = 'WEB_UI' | 'SERVER_API' | 'DATABASE'
 export type LearningPath = {
+  subject_ids: LearningSubjectId[]; common_mission_ids: string[]
+  subjects: { id: LearningSubjectId; title: string; description: string; mission_ids: string[]; foundation_ids: string[] }[]
   version: number; level: LearningLevel | null; source: 'SELECTED' | 'M01' | 'UNSET'
   recommended_level: LearningLevel | null; foundation_ids: string[]
   levels: { id: LearningLevel; title: string; description: string }[]
   diagnostic_status: 'NOT_STARTED' | 'PARTIAL' | 'COMPLETE'; diagnostic_version: number
   review: { id: string; label: string; correct: boolean; explanation: string }[]
 }
-export type WorkFeedback = { passed: boolean; issues: Record<string, string>; scope: string; checks?: { id: string; label: string; passed: boolean; message: string }[]; recommendation: { foundation_ids: string[]; message: string } | null }
+export type ExecutionObservation = {
+  status: string; error?: string; stderr?: string; scope?: string
+  checks?: { id: string; label: string; passed: boolean; message: string }[]
+  cases?: ({ input: string; prevented: boolean; value: string; items: string[]; error: string } | { title: string; prevented: boolean; input: string; error: string; calls: { title: string; content: string }[] })[]
+  requests?: { method: string; path: string; payload: unknown; status: number; body: unknown }[]
+  database_rows?: unknown[][]; database_after_restart?: unknown[][]; restarted?: boolean; tree?: unknown
+}
+export type WorkFeedback = { passed: boolean; issues: Record<string, string>; scope: string; checks?: { id: string; label: string; passed: boolean; message: string }[]; recommendation: { foundation_ids: string[]; message: string } | null; execution?: ExecutionObservation; transfer?: ExecutionObservation; baseline?: ExecutionObservation }
+export type LearningAssignment = {
+  key: string; version: string; level: LearningLevel | null; title: string; pinned: boolean
+  has_transfer: boolean; transfer_required: boolean; summary: string; steps: string[]
+}
 export type LearningWork = {
   version: number; answers: Record<string, string>; status: string; feedback: WorkFeedback | null
   updated_at: string | null; reopened: boolean
+  assignment?: LearningAssignment
 }
 export type LearningNode = {
   id: string; title: string; objective: string; prediction: string; task: string; recovery: string
   practice: { task: string; expected_observation: string }; next_ids: string[]; foundation_ids: string[]; unlocked: boolean
-  fields: { id: string; label: string; kind: string; language?: string; filename?: string; run_field?: string; choices?: string[]; placeholder?: string; min_length?: number }[]
+  fields: { id: string; label: string; kind: string; language?: string; filename?: string; run_field?: string; choices?: string[]; placeholder?: string; min_length?: number; optional?: boolean; practice_note?: boolean }[]
+  assignment: LearningAssignment
+  project_handoffs?: { field: string; project_id: string | null; project_name: string | null; can_open: boolean; can_create: boolean; reason: string; source_changed: boolean }[]
+  prerequisite_rechecks?: { id: string; title: string; reason: 'CHANGED' | 'INCOMPLETE'; can_open: boolean }[]
+  practice_guide?: { outcome: string; steps: string[]; expected: string; troubleshooting: string } | null
   concept_check: { id: string; prompt: string; choices: string[] }; work: LearningWork
   starter_code?: string | null
   starter_transfer_code?: string | null
@@ -131,8 +153,8 @@ export type JavaScriptReport = {
 }
 export type LearningWorkspace = {
   current_node_id: string | null; completed_ids: string[]
-  missions: { id: string; title: string; unit_id: string; available: boolean; unlocked: boolean; status: string }[]
-  foundations: { id: string; title: string; status: string }[]
+  missions: { id: string; title: string; unit_id: string; available: boolean; unlocked: boolean; status: string; work_version: number; assignment_title: string | null }[]
+  foundations: { id: string; title: string; status: string; work_version: number }[]
 }
 export type LearningExecutionSummary = { id: string; field: string; status: string; work_version: number; created_at: string; is_current: boolean }
 export type LearningProjectPreview = {
@@ -159,7 +181,7 @@ async function waitForCodeReport(initial: CodeExecutionReport, signal?: AbortSig
 const nodePath = (enrollmentId: string, nodeId: string) => `/enrollments/${encodeURIComponent(enrollmentId)}/nodes/${encodeURIComponent(nodeId)}`
 export const curriculumService = {
   path: (id: string) => request<LearningPath>(`/enrollments/${encodeURIComponent(id)}/path`),
-  savePath: (id: string, version: number, level: LearningLevel | null) => request<LearningPath>(`/enrollments/${encodeURIComponent(id)}/path`, { expected_version: version, level }, 'PUT'),
+  savePath: (id: string, version: number, level: LearningLevel | null, subjectIds: LearningSubjectId[]) => request<LearningPath>(`/enrollments/${encodeURIComponent(id)}/path`, { expected_version: version, level, subject_ids: subjectIds }, 'PUT'),
   list: () => request<Curriculum[]>('/curricula'),
   enroll: (courseKey: string) => request<Enrollment>('/enrollments', { course_key: courseKey }),
   executionHistory: (id: string, nodeId: string) => request<LearningExecutionSummary[]>(`${nodePath(id, nodeId)}/executions`),
@@ -173,8 +195,9 @@ export const curriculumService = {
   portfolio: (id: string) => request<Record<string, unknown>>(`/enrollments/${id}/portfolio`),
   workspace: (id: string) => request<LearningWorkspace>(`/enrollments/${id}/workspace`),
   node: (id: string, nodeId: string) => request<LearningNode>(nodePath(id, nodeId)),
-  save: (id: string, nodeId: string, expectedVersion: number, answers: Record<string, string>) => request<LearningWork>(`${nodePath(id, nodeId)}/work`, { expected_version: expectedVersion, answers }, 'PUT'),
+  save: (id: string, nodeId: string, expectedVersion: number, answers: Record<string, string>, assignmentKey?: string) => request<LearningWork>(`${nodePath(id, nodeId)}/work`, { expected_version: expectedVersion, answers, expected_assignment_key: assignmentKey }, 'PUT'),
   submit: (id: string, nodeId: string, expectedVersion: number) => request<LearningWork>(`${nodePath(id, nodeId)}/submit`, { expected_version: expectedVersion }),
+  upgradePractice: (id: string, nodeId: string, version: number) => request<LearningNode>(`${nodePath(id, nodeId)}/practice-format`, { expected_version: version }),
   hint: (id: string, nodeId: string, level: number) => request<{ level: number; text: string; recovery: string }>(`${nodePath(id, nodeId)}/hint?level=${level}`),
   run: (id: string, nodeId: string, version: number) => request<JavaScriptReport>(`${nodePath(id, nodeId)}/run`, { expected_version: version }),
   runCode: async (id: string, nodeId: string, version: number, field: string, signal?: AbortSignal): Promise<CodeExecutionReport> => {

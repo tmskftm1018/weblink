@@ -17,6 +17,7 @@ def source_origin(enrollment, work, node_id, field, receipt):
     return {"course_id": enrollment.course_key, "content_version": enrollment.content_version,
               "rubric_version": enrollment.rubric_version, "node_id": node_id,
               "field": field, "work_version": work.version, "artifact_hash": work.source_hash,
+              "assignment": work.assignment,
               "checks": receipt["checks"], "scope": "학습 답안 실행 기록입니다. 생성할 프로젝트의 별도 실행 통과를 뜻하지 않습니다."}
 
 

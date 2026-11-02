@@ -122,6 +122,7 @@ class LearningWorkSaveRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     expected_version: int = Field(ge=0)
+    expected_assignment_key: str | None = Field(default=None, max_length=100)
     answers: dict[str, str] = Field(max_length=20)
 
     @field_validator("answers")
@@ -164,6 +165,14 @@ class LearningPathSaveRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     expected_version: int = Field(ge=0)
     level: Literal["BEGINNER", "PRACTICED", "EXPERIENCED"] | None = None
+    subject_ids: list[Literal["WEB_UI", "SERVER_API", "DATABASE"]] | None = Field(default=None, min_length=1, max_length=3)
+
+    @field_validator("subject_ids")
+    @classmethod
+    def unique_subjects(cls, value: list[str] | None) -> list[str] | None:
+        if value is not None and len(set(value)) != len(value):
+            raise ValueError("같은 과목을 여러 번 선택할 수 없습니다.")
+        return value
 
 
 class LearningProjectSyncRequest(LearningProjectRequest):

@@ -28,8 +28,8 @@ from app.schemas.learning import (
 from app.services import learning as learning_service
 from app.services import learning_curriculum as curriculum_service
 from app.services import learning_execution, learning_handoff, learning_project_sync
-from app.services import learning_work as work_service
 from app.services import learning_path as path_service
+from app.services import learning_work as work_service
 
 router = APIRouter(prefix="/learning", tags=["learning"])
 SessionDep = Annotated[Session, Depends(get_db)]
@@ -174,12 +174,17 @@ def learning_node(enrollment_id: UUID, node_id: str, db: SessionDep, user: Curre
 
 @router.put("/enrollments/{enrollment_id}/nodes/{node_id}/work")
 def save_learning_work(enrollment_id: UUID, node_id: str, payload: LearningWorkSaveRequest, db: SessionDep, user: CurrentUser) -> dict:
-    return work_service.save_work(db, user, enrollment_id, node_id, payload.expected_version, payload.answers)
+    return work_service.save_work(db, user, enrollment_id, node_id, payload.expected_version, payload.answers, payload.expected_assignment_key)
 
 
 @router.post("/enrollments/{enrollment_id}/nodes/{node_id}/submit")
 def submit_learning_work(enrollment_id: UUID, node_id: str, payload: LearningWorkSubmitRequest, db: SessionDep, user: CurrentUser) -> dict:
     return work_service.submit_work(db, user, enrollment_id, node_id, payload.expected_version)
+
+
+@router.post("/enrollments/{enrollment_id}/nodes/{node_id}/practice-format")
+def upgrade_practice_format(enrollment_id: UUID, node_id: str, payload: LearningWorkSubmitRequest, db: SessionDep, user: CurrentUser) -> dict:
+    return work_service.upgrade_practice(db, user, enrollment_id, node_id, payload.expected_version)
 
 
 @router.get("/enrollments/{enrollment_id}/nodes/{node_id}/hint")

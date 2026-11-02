@@ -1,4 +1,4 @@
-export type BrowserDraft = { version: number; answers: Record<string, string>; baseAnswers?: Record<string, string>; updatedAt?: string }
+export type BrowserDraft = { version: number; answers: Record<string, string>; baseAnswers?: Record<string, string>; assignmentKey?: string; updatedAt?: string }
 
 export function parseBrowserDraft(raw: string | null): BrowserDraft | null {
   if (!raw) return null
@@ -8,6 +8,7 @@ export function parseBrowserDraft(raw: string | null): BrowserDraft | null {
     if (!Object.values(value.answers).every(item => typeof item === 'string')) return null
     if (value.baseAnswers !== undefined && (!value.baseAnswers || typeof value.baseAnswers !== 'object' || Array.isArray(value.baseAnswers) || !Object.values(value.baseAnswers).every(item => typeof item === 'string'))) return null
     if (value.updatedAt !== undefined && (typeof value.updatedAt !== 'string' || !Number.isFinite(Date.parse(value.updatedAt)))) return null
+    if (value.assignmentKey !== undefined && (typeof value.assignmentKey !== 'string' || value.assignmentKey.length > 100)) return null
     return value
   } catch { return null }
 }
@@ -33,7 +34,7 @@ export function clearBrowserDraft(key: string, draft: BrowserDraft): void {
     try {
       const storage = window[kind]
       const current = parseBrowserDraft(storage.getItem(key))
-      if (current && current.version === draft.version && JSON.stringify(current.answers) === JSON.stringify(draft.answers)) storage.removeItem(key)
+      if (current && current.version === draft.version && current.assignmentKey === draft.assignmentKey && JSON.stringify(current.answers) === JSON.stringify(draft.answers)) storage.removeItem(key)
     } catch { /* Recovery storage is optional. */ }
   }
 }

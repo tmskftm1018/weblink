@@ -1,13 +1,13 @@
 import { useEffect, useRef } from 'react'
 
-type LandingPageProps = { onEnter: (mode: 'login' | 'signup') => void; isAuthenticated?: boolean }
+type LandingPageProps = { onEnter: (mode: 'login' | 'signup', destination?: 'lesson' | 'projects' | 'connections') => void; isAuthenticated?: boolean }
 
 const capabilities = [
   { number: '01', title: '블록으로 배우기', copy: '순서를 맞추고 실행 흐름을 익히며 Python의 기초를 연습해요.', tag: 'LEARN' },
   { number: '02', title: '프로젝트로 만들기', copy: '파일을 편집하고 저장한 코드를 실제로 실행해 결과를 확인해요.', tag: 'BUILD' },
   { number: '03', title: '팀과 함께 정리하기', copy: '프로젝트 파일과 작업 보드를 공유하고 변경 내용을 이어가요.', tag: 'COLLABORATE' },
   { number: '04', title: '데이터와 연결하기', copy: 'API와 SQLite를 다루고 Google Sheets 데이터를 읽는 흐름을 배워요.', tag: 'CONNECT' },
-]
+] as const
 
 const stackGroups = [
   { number: '01', category: '사용 언어', items: ['Python', 'TypeScript'] },
@@ -150,7 +150,7 @@ export default function LandingPage({ onEnter, isAuthenticated = false }: Landin
               <p>필요한 기능을 골라 시작하고,<br />하나의 프로젝트에서 차근차근 연결해 보세요.</p>
             </div>
             <div className="feature-grid">
-              {capabilities.map((feature) => <button className="feature-card" type="button" key={feature.number} onClick={() => onEnter(isAuthenticated ? 'login' : 'signup')}>
+              {capabilities.map((feature) => <button className="feature-card" type="button" key={feature.number} onClick={() => onEnter(isAuthenticated ? 'login' : 'signup', feature.tag === 'LEARN' ? 'lesson' : feature.tag === 'CONNECT' ? 'connections' : 'projects')}>
                 <span className="feature-top"><span>{feature.number}</span><span className="feature-arrow" aria-hidden="true">↗</span></span>
                 <span className="feature-tag">{feature.tag}</span>
                 <strong>{feature.title}</strong><span className="feature-copy">{feature.copy}</span>
