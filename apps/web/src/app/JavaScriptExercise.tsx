@@ -25,7 +25,7 @@ export default function JavaScriptExercise({ value, starter, path, disabled, onC
       finally { setRunning(false) }
     }}>{running ? '저장한 코드를 실행하고 있어요…' : '저장 후 6가지 입력 실행'}</button><button type="button" onClick={() => {
       const url = URL.createObjectURL(new Blob([value], { type: 'text/javascript;charset=utf-8' }))
-      const link = document.createElement('a'); link.href = url; link.download = 'WebLink-M04-main.js'; link.click()
+      const link = document.createElement('a'); link.href = url; link.download = '우리들의 개발일지-M04-main.js'; link.click()
       window.setTimeout(() => URL.revokeObjectURL(url), 1000)
     }}>JavaScript 파일 내려받기</button></div>
     {error && <p role="alert">{error}</p>}

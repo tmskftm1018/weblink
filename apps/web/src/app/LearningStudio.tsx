@@ -60,7 +60,7 @@ function ManualAI({ node, answers, feedback }: { node: LearningNode; answers: Re
   const [notice, setNotice] = useState('')
   const context = aiHelpContext(node, answers, includeAnswers, feedback)
   useEffect(() => { setReviewed(false); setNotice('') }, [context])
-  return <details className="learning-help"><summary>선택 · 내 AI 웹사이트나 CLI에서 도움받기</summary><p>본인이 사용하는 AI를 직접 열고 아래 내용을 붙여 넣으세요. WebLink에 AI API 키를 입력할 필요가 없고, AI 없이도 모든 공개 과제를 진행할 수 있어요.</p><label><input type="checkbox" checked={includeAnswers} onChange={(event) => setIncludeAnswers(event.target.checked)} />내 작성 내용도 포함하기</label><textarea aria-label="AI에 전달할 내용 미리보기" value={context} readOnly rows={9} /><p>일부 알려진 비밀값 형식만 가립니다. 개인정보나 비밀번호가 남아 있지 않은지 직접 확인하세요.</p><label><input type="checkbox" checked={reviewed} onChange={(event) => setReviewed(event.target.checked)} />전달할 내용을 확인했어요</label><button type="button" disabled={!reviewed} onClick={async () => { try { await navigator.clipboard.writeText(context); setNotice('복사했어요. 원하는 AI에 직접 붙여 넣으세요.') } catch { setNotice('자동 복사가 막혔어요. 위 내용을 선택해 직접 복사해 주세요.') } }}>확인한 내용 복사</button>{notice && <p role="status">{notice}</p>}</details>
+  return <details className="learning-help"><summary>선택 · 내 AI 웹사이트나 CLI에서 도움받기</summary><p>본인이 사용하는 AI를 직접 열고 아래 내용을 붙여 넣으세요. 우리들의 개발일지에 AI API 키를 입력할 필요가 없고, AI 없이도 모든 공개 과제를 진행할 수 있어요.</p><label><input type="checkbox" checked={includeAnswers} onChange={(event) => setIncludeAnswers(event.target.checked)} />내 작성 내용도 포함하기</label><textarea aria-label="AI에 전달할 내용 미리보기" value={context} readOnly rows={9} /><p>일부 알려진 비밀값 형식만 가립니다. 개인정보나 비밀번호가 남아 있지 않은지 직접 확인하세요.</p><label><input type="checkbox" checked={reviewed} onChange={(event) => setReviewed(event.target.checked)} />전달할 내용을 확인했어요</label><button type="button" disabled={!reviewed} onClick={async () => { try { await navigator.clipboard.writeText(context); setNotice('복사했어요. 원하는 AI에 직접 붙여 넣으세요.') } catch { setNotice('자동 복사가 막혔어요. 위 내용을 선택해 직접 복사해 주세요.') } }}>확인한 내용 복사</button>{notice && <p role="status">{notice}</p>}</details>
 }
 
 export default function LearningStudio({ userId, onLegacy, beforeLeaveRef, onOpenProject, initialPage = 'home' }: { userId: string; onLegacy: (courseSlug?: string, lessonSlug?: string) => void; initialPage?: LearningHomePage; onOpenProject: (id: string, jump?: ProjectJump) => Promise<void>; beforeLeaveRef: MutableRefObject<(() => Promise<boolean>) | null> }) {
@@ -353,7 +353,7 @@ export default function LearningStudio({ userId, onLegacy, beforeLeaveRef, onOpe
     await action(async () => {
       if (page === 'mission' && dirty) await persist()
       const data = await curriculumService.portfolio(enrollment.id)
-      downloadText('WebLink-현재과정-학습기록.json', JSON.stringify(data, null, 2))
+      downloadText('우리들의 개발일지-현재과정-학습기록.json', JSON.stringify(data, null, 2))
       setNotice('현재 과정의 저장된 답안과 실행 기록을 내려받았어요. 이전 수업 기록은 보관함에서 확인하세요.')
     })
   }
@@ -381,7 +381,7 @@ export default function LearningStudio({ userId, onLegacy, beforeLeaveRef, onOpe
   function exportDraft() {
     if (!node) return
     const content = `# ${node.id} · ${node.title}\n\n${node.fields.map((field) => `## ${field.label}\n\n${answers[field.id] || '(작성 전)'}`).join('\n\n')}\n\n## 개념 확인\n\n${node.concept_check.prompt}\n\n${answers.concept_answer || '(작성 전)'}\n`
-    downloadText(`WebLink-${node.id}-학습기록.md`, content)
+    downloadText(`우리들의 개발일지-${node.id}-학습기록.md`, content)
   }
 
   useEffect(() => {
@@ -445,7 +445,7 @@ export default function LearningStudio({ userId, onLegacy, beforeLeaveRef, onOpe
           setAnswers(merged); setRecovery(null); setError(''); setSaveConflict(false)
           writeLearningDraft(draftKey(userId, enrollment.id, node.id), learningSnapshot(work, merged, node.assignment.key))
           setNotice('선택한 내용을 편집기로 가져왔어요. 확인한 뒤 초안을 저장해 주세요.')
-        }} onDownload={() => downloadText(`WebLink-${node.id}-복구본.json`, JSON.stringify({ node_id: node.id, ...recovery }, null, 2))} onDiscard={() => {
+        }} onDownload={() => downloadText(`우리들의 개발일지-${node.id}-복구본.json`, JSON.stringify({ node_id: node.id, ...recovery }, null, 2))} onDiscard={() => {
           clearLearningDraft(draftKey(userId, enrollment.id, node.id), recovery)
           setRecovery(null); setAnswers(initialAnswers({ ...node, work })); setError(''); setSaveConflict(false); setNotice('서버 답안을 사용합니다.')
         }} />}

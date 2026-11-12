@@ -52,7 +52,7 @@ export default function RuntimeCodeExercise({ value, starter, path, language, sc
       {(value !== ranSource || ranRevision !== revisionTag) && <p>코드 또는 함께 저장하는 답안이 바뀌었어요. 아래는 이전 저장본의 결과이며 다시 실행해 확인할 수 있어요.</p>}
       <button type="button" onClick={() => {
         const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: 'application/json;charset=utf-8' }))
-        const link = document.createElement('a'); link.href = url; link.download = `WebLink-실행-v${report.work_version}.json`; link.click()
+        const link = document.createElement('a'); link.href = url; link.download = `우리들의 개발일지-실행-v${report.work_version}.json`; link.click()
         window.setTimeout(() => URL.revokeObjectURL(url), 1000)
       }}>이 실행 결과 내려받기</button>
       <LearningExecutionDetails report={report} />

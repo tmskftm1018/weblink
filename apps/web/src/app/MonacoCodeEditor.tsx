@@ -46,7 +46,7 @@ export default function MonacoCodeEditor({ path, value, readOnly, onChange, init
   return <Editor
     height="100%"
     language={languageForPath(path)}
-    theme="vs-dark"
+    theme="vs"
     path={path}
     value={value}
     onMount={(editor) => {
@@ -76,5 +76,5 @@ export default function MonacoCodeEditor({ path, value, readOnly, onChange, init
 }
 
 export function MonacoDiffViewer({ original, modified, modelScope, path, sideBySide }: { original: string; modified: string; modelScope: string; path: string; sideBySide: boolean }) {
-  return <DiffEditor height="360px" original={original} modified={modified} language={languageForPath(path)} theme="vs-dark" originalModelPath={`${modelScope}/before/${path}`} modifiedModelPath={`${modelScope}/after/${path}`} options={{ readOnly: true, originalEditable: false, renderSideBySide: sideBySide, automaticLayout: true, minimap: { enabled: false }, scrollBeyondLastLine: false, wordWrap: 'on', fontSize: 13, diffAlgorithm: 'advanced', maxComputationTime: 1000 }} />
+  return <DiffEditor height="360px" original={original} modified={modified} language={languageForPath(path)} theme="vs" originalModelPath={`${modelScope}/before/${path}`} modifiedModelPath={`${modelScope}/after/${path}`} options={{ readOnly: true, originalEditable: false, renderSideBySide: sideBySide, automaticLayout: true, minimap: { enabled: false }, scrollBeyondLastLine: false, wordWrap: 'on', fontSize: 13, diffAlgorithm: 'advanced', maxComputationTime: 1000 }} />
 }

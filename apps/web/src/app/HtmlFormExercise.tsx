@@ -52,7 +52,7 @@ export default function HtmlFormExercise({ value, starter, path, disabled, onCha
     <div className="learning-html-exercise__editor"><Suspense fallback={<p>코드 편집기를 불러오는 중…</p>}><Editor path={path} value={value} readOnly={disabled} onChange={onChange} /></Suspense></div>
     <div className="learning-html-exercise__toolbar"><span>{value.length.toLocaleString()} / 32,000자</span><button type="button" disabled={disabled || value.length > 32000} onClick={() => setPreviewSource(value)}>미리보기 갱신</button><button type="button" onClick={() => {
       const url = URL.createObjectURL(new Blob([value], { type: 'text/html;charset=utf-8' }))
-      const link = document.createElement('a'); link.href = url; link.download = 'WebLink-M03-index.html'; link.click()
+      const link = document.createElement('a'); link.href = url; link.download = '우리들의 개발일지-M03-index.html'; link.click()
       window.setTimeout(() => URL.revokeObjectURL(url), 1000)
     }}>HTML 파일 내려받기</button></div>
     {value !== previewSource && <p role="status">코드가 바뀌었어요. 미리보기를 갱신하면 반영됩니다. 서버 저장·제출은 아래 버튼에서 따로 진행해요.</p>}

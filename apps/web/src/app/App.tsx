@@ -1116,7 +1116,7 @@ export default function App() {
         'connection.close()',
         '',
         '# 첫 번째 열 값을 고유 키로 사용하며, 성공하면 삭제된 행까지 현재 시트와 일치시킵니다.',
-        '# Google OAuth 비밀값은 이 코드에 들어가지 않으며 WebLink 연결을 통해서만 시트를 읽습니다.',
+        '# Google OAuth 비밀값은 이 코드에 들어가지 않으며 우리들의 개발일지 연결을 통해서만 시트를 읽습니다.',
       ].join('\n')
       const created = await projectService.create({
         name: 'Google Sheets 데이터 연결',
@@ -1633,7 +1633,7 @@ export default function App() {
       setOpenFilePaths((current) => current.map((path) => path === filePath ? newPath : path))
       setProjectDirty(true)
       setProjectNotice(newPath === requestedPath
-        ? `‘${filePath}’ 파일을 ‘${newPath}’로 옮겼습니다. 초안을 저장하면 WebLink에도 적용됩니다.`
+        ? `‘${filePath}’ 파일을 ‘${newPath}’로 옮겼습니다. 초안을 저장하면 우리들의 개발일지에도 적용됩니다.`
         : `같은 이름이 있어 ‘${filePath}’ 파일을 ‘${newPath}’로 옮겼습니다.`)
     } catch (cause) {
       setProjectError(cause instanceof Error ? cause.message : '파일을 폴더로 옮기지 못했습니다.')
@@ -1741,7 +1741,7 @@ export default function App() {
   }
 
   async function disconnectLocalProjectDirectory() {
-    if (!workspace || !window.confirm('WebLink와 폴더의 연결만 해제할까요? 컴퓨터 폴더의 파일은 삭제되지 않습니다.')) return
+    if (!workspace || !window.confirm('우리들의 개발일지와 폴더의 연결만 해제할까요? 컴퓨터 폴더의 파일은 삭제되지 않습니다.')) return
     setProjectBusy(true)
     try {
       await unbindProjectDirectory(workspace.id)
@@ -1776,7 +1776,7 @@ export default function App() {
   }
 
   async function deleteProjectById(projectId: string, projectName: string) {
-    if (!window.confirm(`‘${projectName}’ 프로젝트와 초안, 저장 버전, 실행 기록을 WebLink에서 삭제할까요? 연결된 컴퓨터/GitHub 폴더의 파일은 보존됩니다.`)) return
+    if (!window.confirm(`‘${projectName}’ 프로젝트와 초안, 저장 버전, 실행 기록을 우리들의 개발일지에서 삭제할까요? 연결된 컴퓨터/GitHub 폴더의 파일은 보존됩니다.`)) return
     setProjectBusy(true)
     setProjectError('')
     try {
@@ -1800,7 +1800,7 @@ export default function App() {
         setProjectNeedsReload(false)
         setView('projects')
       }
-      setProjectNotice(`‘${projectName}’ 프로젝트의 WebLink 초안·버전·실행 기록을 삭제했습니다. 컴퓨터/GitHub 폴더는 보존했어요.`)
+      setProjectNotice(`‘${projectName}’ 프로젝트의 우리들의 개발일지 초안·버전·실행 기록을 삭제했습니다. 컴퓨터/GitHub 폴더는 보존했어요.`)
     } catch (cause) {
       setProjectError(cause instanceof Error ? cause.message : '프로젝트를 삭제하지 못했습니다.')
     } finally {
@@ -1820,7 +1820,7 @@ export default function App() {
       return
     }
     if (path.split('/').pop()?.toLowerCase() === '.gitkeep') {
-      setProjectError('.gitkeep은 폴더를 보존하기 위해 WebLink가 관리하는 파일입니다.')
+      setProjectError('.gitkeep은 폴더를 보존하기 위해 우리들의 개발일지가 관리하는 파일입니다.')
       return
     }
     if (workspace.files.length >= 50) {
@@ -1875,7 +1875,7 @@ export default function App() {
     const projectFiles = workspace.files
       .filter((file) => !file.path.toLocaleLowerCase().startsWith('.env') && file.path !== '.gitkeep')
       .map((file) => `- \`${file.path}\``)
-    const content = `# ${workspace.name}\n\n${workspace.description || '이 프로젝트가 해결하려는 문제와 주요 기능을 소개해 주세요.'}\n\n## 시작하기\n\n프로젝트 파일을 확인한 뒤 WebLink에서 코드를 실행해 보세요.\n\n## 파일 구성\n\n${projectFiles.length ? projectFiles.join('\n') : '- 아직 프로젝트 파일이 없습니다.'}\n\n## 진행 상황\n\n작업 보드에서 할 일과 팀원별 진행 상황을 정리합니다.\n`
+    const content = `# ${workspace.name}\n\n${workspace.description || '이 프로젝트가 해결하려는 문제와 주요 기능을 소개해 주세요.'}\n\n## 시작하기\n\n프로젝트 파일을 확인한 뒤 우리들의 개발일지에서 코드를 실행해 보세요.\n\n## 파일 구성\n\n${projectFiles.length ? projectFiles.join('\n') : '- 아직 프로젝트 파일이 없습니다.'}\n\n## 진행 상황\n\n작업 보드에서 할 일과 팀원별 진행 상황을 정리합니다.\n`
     setProjectBusy(true)
     setProjectError('')
     try {
@@ -1949,7 +1949,7 @@ export default function App() {
       if (firstFile) openProjectFile(firstFile.path)
       setProjectDirty(true)
       const skippedNotice = dropped.skippedSensitiveFiles ? ` 비밀 파일 ${dropped.skippedSensitiveFiles}개는 제외했어요.` : ''
-      setProjectNotice(`${dropped.files.length}개 파일과 빈 폴더 ${dropped.emptyFolders.length}개를 ${folderPath ? `‘${folderPath}’ 폴더` : '프로젝트 루트'}에 추가했습니다.${skippedNotice} 저장하면 WebLink 초안에도 적용됩니다.`)
+      setProjectNotice(`${dropped.files.length}개 파일과 빈 폴더 ${dropped.emptyFolders.length}개를 ${folderPath ? `‘${folderPath}’ 폴더` : '프로젝트 루트'}에 추가했습니다.${skippedNotice} 저장하면 우리들의 개발일지 초안에도 적용됩니다.`)
     } catch (cause) {
       setProjectError(cause instanceof Error ? cause.message : '파일을 프로젝트에 추가하지 못했습니다.')
     } finally {
@@ -1989,8 +1989,8 @@ export default function App() {
       setProjectNotice(finalPath !== newPath
         ? `같은 이름이 있어 ‘${finalPath}’로 변경했습니다.`
         : localProjectDirectory
-          ? `${oldPath}의 이름을 ${finalPath}(으)로 바꾸고 연결 폴더에도 반영했습니다. 저장하면 WebLink 초안에 적용됩니다.`
-          : `${oldPath}의 이름을 ${finalPath}(으)로 바꿨습니다. 저장하면 WebLink 초안에 적용됩니다.`)
+          ? `${oldPath}의 이름을 ${finalPath}(으)로 바꾸고 연결 폴더에도 반영했습니다. 저장하면 우리들의 개발일지 초안에 적용됩니다.`
+          : `${oldPath}의 이름을 ${finalPath}(으)로 바꿨습니다. 저장하면 우리들의 개발일지 초안에 적용됩니다.`)
     } catch (cause) {
       setProjectError(cause instanceof Error ? cause.message : '파일 이름을 바꾸지 못했습니다.')
     } finally {
@@ -2002,8 +2002,8 @@ export default function App() {
     if (!workspace) return
     const mainWarning = path === 'main.py' ? ' 루트 main.py가 없어 프로젝트를 실행할 수 없으며, 다시 만들면 실행할 수 있습니다.' : ''
     const prompt = localProjectDirectory
-      ? `‘${path}’ 파일을 WebLink 초안과 연결된 컴퓨터 폴더에서 삭제할까요? GitHub에 올라간 파일은 직접 커밋하기 전까지 그대로 유지됩니다.${mainWarning}`
-      : `‘${path}’ 파일을 WebLink 프로젝트 초안에서 삭제할까요?${mainWarning}`
+      ? `‘${path}’ 파일을 우리들의 개발일지 초안과 연결된 컴퓨터 폴더에서 삭제할까요? GitHub에 올라간 파일은 직접 커밋하기 전까지 그대로 유지됩니다.${mainWarning}`
+      : `‘${path}’ 파일을 우리들의 개발일지 프로젝트 초안에서 삭제할까요?${mainWarning}`
     if (!window.confirm(prompt)) return
     setProjectBusy(true)
     setProjectError('')
@@ -2030,8 +2030,8 @@ export default function App() {
     const removedFiles = workspace.files.filter((file) => file.path.startsWith(prefix))
     if (!removedFiles.length) return
     const warning = localProjectDirectory
-      ? `‘${folderPath}’ 폴더와 안의 프로젝트 파일 ${removedFiles.length}개를 WebLink 초안 및 연결된 컴퓨터 폴더에서 삭제할까요? 폴더 안의 WebLink가 관리하지 않는 파일은 보존됩니다.`
-      : `‘${folderPath}’ 폴더와 안의 프로젝트 파일 ${removedFiles.length}개를 WebLink 초안에서 삭제할까요?`
+      ? `‘${folderPath}’ 폴더와 안의 프로젝트 파일 ${removedFiles.length}개를 우리들의 개발일지 초안 및 연결된 컴퓨터 폴더에서 삭제할까요? 폴더 안의 우리들의 개발일지가 관리하지 않는 파일은 보존됩니다.`
+      : `‘${folderPath}’ 폴더와 안의 프로젝트 파일 ${removedFiles.length}개를 우리들의 개발일지 초안에서 삭제할까요?`
     if (!window.confirm(warning)) return
     setProjectBusy(true)
     setProjectError('')
@@ -2059,7 +2059,7 @@ export default function App() {
       setOpenFilePaths(nextTabs)
       setSelectedPath((current) => removedPaths.has(current) ? nextTabs[0] ?? '' : current)
       setProjectDirty(true)
-      setProjectNotice(`‘${folderPath}’ 폴더의 프로젝트 파일 ${removedFiles.length}개를 삭제했습니다. 초안을 저장하면 WebLink에도 적용됩니다.`)
+      setProjectNotice(`‘${folderPath}’ 폴더의 프로젝트 파일 ${removedFiles.length}개를 삭제했습니다. 초안을 저장하면 우리들의 개발일지에도 적용됩니다.`)
     } catch (cause) {
       setProjectError(cause instanceof Error ? cause.message : '폴더를 삭제하지 못했습니다.')
     } finally {
@@ -2133,8 +2133,8 @@ export default function App() {
       setProjectDirty(true)
       setProjectNotice(newPath === requestedPath
         ? localProjectDirectory
-          ? `‘${oldPath}’ 폴더 이름을 ‘${newPath}’(으)로 바꾸고 연결된 컴퓨터 폴더에도 반영했습니다. 초안을 저장하면 WebLink에도 적용됩니다.`
-          : `‘${oldPath}’ 폴더를 ‘${newPath}’(으)로 바꿨습니다. 초안을 저장하면 WebLink에도 적용됩니다.`
+          ? `‘${oldPath}’ 폴더 이름을 ‘${newPath}’(으)로 바꾸고 연결된 컴퓨터 폴더에도 반영했습니다. 초안을 저장하면 우리들의 개발일지에도 적용됩니다.`
+          : `‘${oldPath}’ 폴더를 ‘${newPath}’(으)로 바꿨습니다. 초안을 저장하면 우리들의 개발일지에도 적용됩니다.`
         : `같은 이름이 있어 ‘${newPath}’ 폴더로 변경했습니다.`)
     } catch (cause) {
       setProjectError(cause instanceof Error ? cause.message : '폴더 이름을 바꾸지 못했습니다.')
@@ -2548,12 +2548,12 @@ export default function App() {
       try {
         const excluded = await writeProjectDirectory(localProjectDirectory, current.files)
         setProjectNotice(excluded
-          ? `WebLink 초안을 저장했어요. 비밀 파일 ${excluded}개는 컴퓨터 폴더에서 제외했습니다.`
+          ? `우리들의 개발일지 초안을 저장했어요. 비밀 파일 ${excluded}개는 컴퓨터 폴더에서 제외했습니다.`
           : changed
             ? `초안 v${saved.draft_version}을 저장하고 ${localProjectDirectory.name} 폴더에도 기록했어요.`
             : `변경된 파일이 없어 초안과 ${localProjectDirectory.name} 폴더를 그대로 두었습니다.`)
       } catch (cause) {
-        setProjectNotice('WebLink 초안은 저장됐어요. 컴퓨터 폴더 저장은 아래 버튼으로 다시 시도할 수 있습니다.')
+        setProjectNotice('우리들의 개발일지 초안은 저장됐어요. 컴퓨터 폴더 저장은 아래 버튼으로 다시 시도할 수 있습니다.')
         setProjectError(cause instanceof Error ? cause.message : '컴퓨터 폴더에 기록하지 못했습니다.')
       }
     } else {
@@ -2571,7 +2571,7 @@ export default function App() {
     if (!workspace) return
     const payload = { format: 'weblink.project-recovery', format_version: 1, project_id: workspace.id, project_name: workspace.name, draft: draft ?? projectRecovery.snapshot(workspace) }
     const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' }))
-    const link = document.createElement('a'); link.href = url; link.download = `WebLink-${workspace.id}-수정본.json`; link.click()
+    const link = document.createElement('a'); link.href = url; link.download = `우리들의 개발일지-${workspace.id}-수정본.json`; link.click()
     window.setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
@@ -2610,7 +2610,7 @@ export default function App() {
     setProjectBusy(true); setProjectError('')
     try {
       const payload = JSON.parse(await file.text()) as { format?: string; format_version?: number; project_id?: string; draft?: unknown }
-      if (payload?.format !== 'weblink.project-recovery' || payload.format_version !== 1 || payload.project_id !== currentId) throw new Error('현재 프로젝트에서 내려받은 WebLink 수정본 JSON을 선택해 주세요.')
+      if (payload?.format !== 'weblink.project-recovery' || payload.format_version !== 1 || payload.project_id !== currentId) throw new Error('현재 프로젝트에서 내려받은 우리들의 개발일지 수정본 JSON을 선택해 주세요.')
       const draft = parseBrowserDraft(JSON.stringify(payload.draft) ?? null)
       if (!draft) throw new Error('복구 파일의 답안 형식이나 버전이 올바르지 않습니다.')
       for (const contents of [draft.answers, draft.baseAnswers ?? {}]) {
@@ -2619,7 +2619,7 @@ export default function App() {
       }
       const [server, versions] = await Promise.all([projectService.get(currentId), projectService.listVersions(currentId)])
       if (workspaceRef.current?.id === currentId) { setProjectVersions(versions); projectRecovery.compare(draft, server) }
-    } catch (cause) { setProjectError(cause instanceof SyntaxError ? 'JSON을 읽지 못했어요. WebLink에서 내려받은 수정본 파일인지 확인해 주세요.' : cause instanceof Error ? cause.message : '복구 파일을 가져오지 못했습니다.') }
+    } catch (cause) { setProjectError(cause instanceof SyntaxError ? 'JSON을 읽지 못했어요. 우리들의 개발일지에서 내려받은 수정본 파일인지 확인해 주세요.' : cause instanceof Error ? cause.message : '복구 파일을 가져오지 못했습니다.') }
     finally { setProjectBusy(false) }
   }
 
@@ -2631,7 +2631,7 @@ export default function App() {
       const excluded = await writeProjectDirectory(localProjectDirectory, workspace.files)
       setProjectNotice(excluded
         ? `${localProjectDirectory.name} 폴더에 기록했어요. 비밀 파일 ${excluded}개는 제외했습니다.`
-        : `현재 WebLink 파일을 ${localProjectDirectory.name} 폴더에 기록했어요. GitHub Desktop에서 변경 사항을 확인할 수 있습니다.`)
+        : `현재 우리들의 개발일지 파일을 ${localProjectDirectory.name} 폴더에 기록했어요. GitHub Desktop에서 변경 사항을 확인할 수 있습니다.`)
     } catch (cause) {
       setProjectError(cause instanceof Error ? cause.message : '로컬 폴더에 저장하지 못했습니다.')
     } finally {
@@ -2655,7 +2655,7 @@ export default function App() {
   async function pullGitHubSourceUpdates() {
     if (!workspace || !githubSource?.connected || projectDirty || projectNeedsReload || isProjectReadOnly) return
     const repositoryLabel = githubSource.repository_url?.replace('https://github.com/', '') ?? 'GitHub 저장소'
-    if (!window.confirm(`${repositoryLabel}의 ${githubSource.branch ?? '기본 브랜치'} 파일로 현재 WebLink 초안을 교체할까요? 바꾸기 전에 현재 초안을 저장 버전으로 백업합니다. 연결된 컴퓨터 폴더는 자동으로 수정하지 않습니다.`)) return
+    if (!window.confirm(`${repositoryLabel}의 ${githubSource.branch ?? '기본 브랜치'} 파일로 현재 우리들의 개발일지 초안을 교체할까요? 바꾸기 전에 현재 초안을 저장 버전으로 백업합니다. 연결된 컴퓨터 폴더는 자동으로 수정하지 않습니다.`)) return
     setProjectBusy(true)
     setProjectError('')
     try {
@@ -3022,14 +3022,14 @@ export default function App() {
     { id: 'intro', icon: '✎', title: '프로젝트 소개 작성', detail: '팀원이 목표와 방향을 이해하도록 설명을 적어요.', done: Boolean(workspace?.description.trim()), action: () => beginProjectDetailsEdit() },
     { id: 'readme', icon: '▤', title: 'README 준비', detail: '실행 방법과 파일 구조를 문서로 남겨요.', done: Boolean(projectReadmeFile), action: () => { if (projectReadmeFile) { openProjectFile(projectReadmeFile.path); setWorkspaceSection('code') } else void openOrCreateProjectReadme() } },
     { id: 'task', icon: '✓', title: '첫 작업 등록', detail: '할 일을 나눠 팀의 진행 상황을 기록해요.', done: projectTasks.length > 0, action: () => setWorkspaceSection('tasks') },
-    { id: 'team', icon: '♧', title: '팀원과 공유', detail: 'WebLink 계정으로 편집 권한을 나눠요.', done: projectMembers.length > 1, action: () => setWorkspaceSection('team') },
+    { id: 'team', icon: '♧', title: '팀원과 공유', detail: '우리들의 개발일지 계정으로 편집 권한을 나눠요.', done: projectMembers.length > 1, action: () => setWorkspaceSection('team') },
     { id: 'folder', icon: '⌂', title: '이 컴퓨터 폴더 연결', detail: 'GitHub Desktop 저장소와 파일을 이어 쓸 수 있어요.', done: Boolean(localProjectDirectory), action: () => setWorkspaceSection('storage') },
   ]
   const unreadTaskActivityCount = projectTaskActivity.filter((activity) => !seenTaskActivityIds.includes(activity.id)).length
   const myOverdueTaskCount = projectTasks.filter((task) => task.assignee_id === user?.id && task.status !== 'DONE' && !!task.due_date && task.due_date < todayForTasks).length
   const myDueSoonTaskCount = projectTasks.filter((task) => task.assignee_id === user?.id && task.status !== 'DONE' && !!task.due_date && task.due_date >= todayForTasks && task.due_date <= weekCutoffForTasks).length
 
-  if (loading) return <main className="welcome"><p className="status">WebLink를 준비하고 있어요…</p></main>
+  if (loading) return <main className="welcome"><p className="status">우리들의 개발일지를 준비하고 있어요…</p></main>
 
   if (showLanding) return <LandingPage isAuthenticated={Boolean(user) && !sessionExpired} onEnter={(nextMode, destination) => {
     setMode(nextMode); setError(''); setShowLanding(false)
@@ -3044,7 +3044,7 @@ export default function App() {
     return (
       <div className="learning-shell">
         <header className="learning-topbar">
-          <button className="topbar-brand" type="button" onClick={async () => { if (learningLeaveRef.current && !await learningLeaveRef.current()) return; setShowLanding(true) }} aria-label="WebLink 홈페이지"><div className="brand-mark small" aria-hidden="true">W</div><span>WebLink</span></button>
+          <button className="topbar-brand" type="button" onClick={async () => { if (learningLeaveRef.current && !await learningLeaveRef.current()) return; setShowLanding(true) }} aria-label="우리들의 개발일지 홈페이지"><span>우리들의 개발일지</span></button>
           <nav className="topbar-nav" aria-label="주요 메뉴">
             <button className={view === 'lesson' ? 'active' : ''} type="button" onClick={showLesson} disabled={projectBusy}>배우기</button>
             <button className={view === 'projects' || view === 'workspace' ? 'active' : ''} type="button" onClick={showProjects} disabled={projectBusy}>내 프로젝트</button>
@@ -3065,15 +3065,15 @@ export default function App() {
           <main className="project-list-main">
                   <div className="project-heading-row"><div className="project-heading"><p className="eyebrow">내 저장소에서 만들고, 함께 작업하기</p><h1>프로젝트 작업 공간</h1><p>프로젝트를 열어 팀원과 작업하거나, 내 컴퓨터·GitHub 저장소에 연결해 계속 개발하세요.</p></div><div className="project-list-actions"><button className="secondary-button" type="button" onClick={() => { setProjectListPanel(projectListPanel === 'import' ? null : 'import'); setArchiveToImport(null); setArchiveProjectName('') }}>가져오기</button><button className="primary-button" type="button" onClick={() => { setProjectListPanel(projectListPanel === 'create' ? null : 'create'); setArchiveToImport(null); setArchiveProjectName('') }}>＋ 새 프로젝트</button></div></div>
             <details className="project-storage-disclosure">
-              <summary><span>프로젝트 저장·공유 방법</span><small>WebLink · 내 컴퓨터/GitHub Desktop · Google Drive</small></summary>
+              <summary><span>프로젝트 저장·공유 방법</span><small>우리들의 개발일지 · 내 컴퓨터/GitHub Desktop · Google Drive</small></summary>
               <section className="project-storage-hub" aria-label="프로젝트 저장 방식">
               <div className="storage-hub-heading"><div><p className="eyebrow">저장 위치와 협업</p><h2>내 코드, 내가 선택한 저장소</h2></div><span>연결 가능한 저장소 3개</span></div>
               <div className="storage-provider-grid">
-                <article className="storage-provider-card local-provider"><span className="storage-provider-icon" aria-hidden="true">⌂</span><div><h3>내 컴퓨터 · GitHub Desktop</h3><p>프로젝트를 연 뒤 내 컴퓨터 폴더와 연결하세요. 공유 저장소를 GitHub Desktop으로 복제해 두면 WebLink에서 편집한 파일을 그 폴더에 저장하고, 친구와는 GitHub에서 커밋·동기화할 수 있어요.</p><small>Chrome·Edge 지원 · ZIP 내보내기는 다른 브라우저에서도 사용 가능</small></div></article>
-              <article className="storage-provider-card weblink-provider"><span className="storage-provider-icon" aria-hidden="true">W</span><div><h3>WebLink 실행 공간</h3><p>코드를 실행하고 DB·외부 앱 연결을 시험할 때 사용하는 작업용 공간입니다. 현재 이 앱은 직접 운영하는 Docker/PostgreSQL에 사본을 저장해요.</p><small>프로젝트 실행과 저장에 사용</small></div></article>
+                <article className="storage-provider-card local-provider"><span className="storage-provider-icon" aria-hidden="true">⌂</span><div><h3>내 컴퓨터 · GitHub Desktop</h3><p>프로젝트를 연 뒤 내 컴퓨터 폴더와 연결하세요. 공유 저장소를 GitHub Desktop으로 복제해 두면 우리들의 개발일지에서 편집한 파일을 그 폴더에 저장하고, 친구와는 GitHub에서 커밋·동기화할 수 있어요.</p><small>Chrome·Edge 지원 · ZIP 내보내기는 다른 브라우저에서도 사용 가능</small></div></article>
+              <article className="storage-provider-card weblink-provider"><span className="storage-provider-icon" aria-hidden="true">개</span><div><h3>우리들의 개발일지 실행 공간</h3><p>코드를 실행하고 DB·외부 앱 연결을 시험할 때 사용하는 작업용 공간입니다. 현재 이 앱은 직접 운영하는 Docker/PostgreSQL에 사본을 저장해요.</p><small>프로젝트 실행과 저장에 사용</small></div></article>
               <article className="storage-provider-card drive-provider"><span className="storage-provider-icon" aria-hidden="true">↗</span><div><h3>Google Drive</h3><p>Picker에서 선택한 텍스트 파일 여러 개를 새 프로젝트나 현재 프로젝트로 가져올 수 있어요.</p><small>파일당 200KB · 프로젝트 전체 1MB</small></div></article>
               </div>
-              <p className="storage-hub-note">WebLink 안에서 함께 편집하려면 프로젝트를 연 뒤 팀원 이메일과 권한을 추가하세요. GitHub 저장소를 공유하려면 GitHub Desktop에서 친구가 초대한 저장소를 복제해 프로젝트 폴더로 연결한 다음, 변경 파일을 커밋하고 푸시하면 됩니다.</p>
+              <p className="storage-hub-note">우리들의 개발일지 안에서 함께 편집하려면 프로젝트를 연 뒤 팀원 이메일과 권한을 추가하세요. GitHub 저장소를 공유하려면 GitHub Desktop에서 친구가 초대한 저장소를 복제해 프로젝트 폴더로 연결한 다음, 변경 파일을 커밋하고 푸시하면 됩니다.</p>
               </section>
             </details>
             {projectNotice && <p className="project-notice project-list-notice" role="status">{projectNotice}</p>}
@@ -3088,7 +3088,7 @@ export default function App() {
                 </form>}
                 {projectListPanel === 'import' && <form className="project-create-form project-import-form" onSubmit={handleImportProject}>
                   <div className="project-form-heading"><div><p className="eyebrow">다른 저장소에서 가져오기</p><h2>프로젝트 가져오기</h2></div><button className="panel-close-button" type="button" aria-label="가져오기 닫기" onClick={() => { setProjectListPanel(null); setArchiveToImport(null); setArchiveProjectName('') }}>×</button></div>
-                  <p className="import-project-note">WebLink에서 내려받은 ZIP을 선택하세요. `.env`와 개인 키 파일은 가져오지 않습니다. ZIP은 1.5MB 이하, 압축을 푼 UTF-8 텍스트 파일은 전체 1MB 이하여야 해요.</p>
+                  <p className="import-project-note">우리들의 개발일지에서 내려받은 ZIP을 선택하세요. `.env`와 개인 키 파일은 가져오지 않습니다. ZIP은 1.5MB 이하, 압축을 푼 UTF-8 텍스트 파일은 전체 1MB 이하여야 해요.</p>
                   <label>ZIP 파일<input type="file" accept=".zip,application/zip,application/x-zip-compressed" onChange={(event) => {
                     const file = event.target.files?.[0] ?? null
                     setArchiveToImport(file)
@@ -3097,7 +3097,7 @@ export default function App() {
                   <label>새 프로젝트 이름<input value={archiveProjectName} onChange={(event) => setArchiveProjectName(event.target.value)} required maxLength={120} placeholder="가져온 프로젝트 이름" /></label>
                   <button className="primary-button" type="submit" disabled={projectBusy || !archiveToImport}>{projectBusy ? '가져오는 중…' : 'ZIP 가져오기'}</button>
                   <details className="github-import-disclosure"><summary>GitHub 저장소에서 가져오기</summary><p>공개 저장소는 바로 가져오고, 비공개 저장소는 연결 앱에서 세분화된 토큰을 연결한 뒤 가져옵니다. 저장소의 기본 브랜치 파일을 새 프로젝트로 복사하며 ZIP은 1.5MB 이하만 지원합니다. 가져온 뒤 GitHub에 자동으로 올라가거나 동기화되지는 않습니다.</p><label>GitHub 저장소 주소<input type="url" value={githubRepositoryUrl} onChange={(event) => { const value = event.target.value; setGithubRepositoryUrl(value); const candidate = value.trim().replace(/\/+$/, '').split('/').pop()?.replace(/\.git$/i, '') ?? ''; if (candidate) setGithubProjectName((current) => current.trim() ? current : candidate.slice(0, 120)) }} maxLength={600} placeholder="https://github.com/owner/repository" /></label><label>프로젝트 이름<input value={githubProjectName} onChange={(event) => setGithubProjectName(event.target.value)} maxLength={120} placeholder="가져온 프로젝트 이름" /></label><button className="secondary-button" type="button" onClick={() => void handleImportGithubRepository()} disabled={projectBusy || !githubRepositoryUrl.trim() || !githubProjectName.trim()}>{projectBusy ? '저장소 확인 중…' : 'GitHub 저장소 가져오기'}</button><button className="plain-link-button" type="button" onClick={showConnections}>GitHub 권한 연결·관리</button></details>
-                  <details className="google-drive-import-disclosure"><summary>Google Drive 파일에서 새 프로젝트 만들기</summary><p>Google 계정을 연결하고 WebLink Picker 설정이 필요해요. 텍스트·Markdown·CSV·JSON·HTML·CSS 파일과 Google Docs·Sheets를 최대 50개 골라 가져옵니다. 파일당 200KB, 전체 1MB까지 지원해요. 같은 이름의 파일은 자동으로 번호를 붙입니다.</p><button className="secondary-button" type="button" onClick={() => void handleImportGoogleDriveFile()} disabled={projectBusy}>{projectBusy ? 'Drive 파일 가져오는 중…' : 'Google Drive 파일 선택'}</button><button className="secondary-button" type="button" onClick={() => void createDriveDataImportProject()} disabled={projectBusy}>{projectBusy ? 'DB 프로젝트 준비 중…' : 'CSV·JSON으로 SQLite DB 프로젝트 만들기'}</button><small>최대 49개 파일을 골라 가져오기 코드를 생성해요. 실행하면 DB에 저장되고, 다시 실행하면 같은 테이블의 기존 행을 파일 내용으로 교체합니다.</small><button className="plain-link-button" type="button" onClick={showConnections}>연결 앱 설정 열기</button></details>
+                  <details className="google-drive-import-disclosure"><summary>Google Drive 파일에서 새 프로젝트 만들기</summary><p>Google 계정을 연결하고 우리들의 개발일지 Picker 설정이 필요해요. 텍스트·Markdown·CSV·JSON·HTML·CSS 파일과 Google Docs·Sheets를 최대 50개 골라 가져옵니다. 파일당 200KB, 전체 1MB까지 지원해요. 같은 이름의 파일은 자동으로 번호를 붙입니다.</p><button className="secondary-button" type="button" onClick={() => void handleImportGoogleDriveFile()} disabled={projectBusy}>{projectBusy ? 'Drive 파일 가져오는 중…' : 'Google Drive 파일 선택'}</button><button className="secondary-button" type="button" onClick={() => void createDriveDataImportProject()} disabled={projectBusy}>{projectBusy ? 'DB 프로젝트 준비 중…' : 'CSV·JSON으로 SQLite DB 프로젝트 만들기'}</button><small>최대 49개 파일을 골라 가져오기 코드를 생성해요. 실행하면 DB에 저장되고, 다시 실행하면 같은 테이블의 기존 행을 파일 내용으로 교체합니다.</small><button className="plain-link-button" type="button" onClick={showConnections}>연결 앱 설정 열기</button></details>
                 </form>}
               </div>}
               <section className="project-cards">
@@ -3107,7 +3107,7 @@ export default function App() {
                   <div className="project-card-entry" key={project.id}>
                     <button className="project-card" type="button" onClick={() => openProject(project.id)} disabled={projectBusy}>
                       <span className="project-card-icon">↗</span>
-                      <span className="project-card-copy"><strong>{project.name}</strong><small>{project.description || '설명이 아직 없습니다.'}</small><small>초안 v{project.draft_version} · {new Date(project.updated_at).toLocaleDateString('ko-KR')}</small><span className={`project-member-role project-member-role-${project.role.toLocaleLowerCase()}`}>{project.role === 'OWNER' ? '소유자' : project.role === 'EDITOR' ? '편집자로 참여' : '보기 전용으로 참여'}</span>{cachedProjectIds.has(project.id) && <span className="project-storage-badge">브라우저 복구본 있음</span>}<span className="project-storage-badge">{projectFolders[project.id] ? `폴더 · ${projectFolders[project.id]}` : 'WebLink 작업 사본'}</span></span>
+                      <span className="project-card-copy"><strong>{project.name}</strong><small>{project.description || '설명이 아직 없습니다.'}</small><small>초안 v{project.draft_version} · {new Date(project.updated_at).toLocaleDateString('ko-KR')}</small><span className={`project-member-role project-member-role-${project.role.toLocaleLowerCase()}`}>{project.role === 'OWNER' ? '소유자' : project.role === 'EDITOR' ? '편집자로 참여' : '보기 전용으로 참여'}</span>{cachedProjectIds.has(project.id) && <span className="project-storage-badge">브라우저 복구본 있음</span>}<span className="project-storage-badge">{projectFolders[project.id] ? `폴더 · ${projectFolders[project.id]}` : '우리들의 개발일지 작업 사본'}</span></span>
                     </button>
                     {project.role === 'OWNER' && <button className="plain-danger-button project-list-delete" type="button" onClick={() => deleteProjectById(project.id, project.name)} disabled={projectBusy} aria-label={`${project.name} 프로젝트 삭제`}>삭제</button>}
                   </div>
@@ -3158,7 +3158,7 @@ export default function App() {
               <button type="button" className={workspaceSection === 'code' ? 'is-active' : ''} aria-pressed={workspaceSection === 'code'} onClick={() => setWorkspaceSection('code')}><strong>코드 편집</strong><span>파일 {workspace.files.length}개{projectDirty ? ' · 저장 안 됨' : ''}</span></button>
               <button type="button" className={workspaceSection === 'tasks' ? 'is-active' : ''} aria-pressed={workspaceSection === 'tasks'} onClick={() => setWorkspaceSection('tasks')}><strong>작업 보드</strong><span>{projectTasks.length}개 · {completedTaskCount}개 완료{unreadTaskActivityCount > 0 ? ` · 알림 ${unreadTaskActivityCount}` : ''}</span></button>
               <button type="button" className={workspaceSection === 'team' ? 'is-active' : ''} aria-pressed={workspaceSection === 'team'} onClick={() => setWorkspaceSection('team')}><strong>팀 관리</strong><span>팀원 {projectMembers.length}명</span></button>
-              <button type="button" className={workspaceSection === 'storage' ? 'is-active' : ''} aria-pressed={workspaceSection === 'storage'} onClick={() => setWorkspaceSection('storage')}><strong>저장 위치</strong><span>{localProjectDirectory ? `연결됨 · ${localProjectDirectory.name}` : 'WebLink 저장'}</span></button>
+              <button type="button" className={workspaceSection === 'storage' ? 'is-active' : ''} aria-pressed={workspaceSection === 'storage'} onClick={() => setWorkspaceSection('storage')}><strong>저장 위치</strong><span>{localProjectDirectory ? `연결됨 · ${localProjectDirectory.name}` : '우리들의 개발일지 저장'}</span></button>
             </nav>
             <section className="project-overview" aria-labelledby="project-overview-title" hidden={workspaceSection !== 'overview'}>
               {projectView.recent && <div className="project-resume"><div><strong>최근 작업 이어가기</strong><small>{({ overview: '개요', code: '코드 편집', tasks: '작업 보드', team: '팀 관리', storage: '저장 위치' })[projectView.recent.section]}{projectView.recent.section === 'code' && projectView.recent.selected ? ` · ${projectView.recent.selected}` : ''} · {new Date(projectView.recent.updatedAt).toLocaleString('ko-KR')}</small></div><button className="secondary-button" type="button" onClick={resumeProjectView} disabled={projectBusy || Boolean(projectRecovery.pending)}>이어서 작업</button></div>}
@@ -3168,7 +3168,7 @@ export default function App() {
                   <div><p className="eyebrow">프로젝트 개요</p><h2 id="project-overview-title">프로젝트 소개</h2><p>{workspace.description || '아직 프로젝트 소개가 없습니다. 무엇을 만들고, 어떤 문제를 해결하는지 적어 두면 팀원과 다음 작업을 시작하기 쉬워요.'}</p></div>
                   {canManageProject && <button className="secondary-button project-overview-edit" type="button" onClick={beginProjectDetailsEdit} disabled={projectBusy || projectDirty}>소개 수정</button>}
                 </div>
-                <aside className="project-overview-meta"><span className="project-overview-live"><i /> {projectDirty ? '저장되지 않은 변경 사항' : '최신 초안'}</span><strong>초안 v{workspace.draft_version}</strong><span>마지막 업데이트 {new Date(workspace.updated_at).toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' })}</span><span>{localProjectDirectory ? `컴퓨터 폴더 · ${localProjectDirectory.name}` : 'WebLink 작업 공간에 저장 중'}</span></aside>
+                <aside className="project-overview-meta"><span className="project-overview-live"><i /> {projectDirty ? '저장되지 않은 변경 사항' : '최신 초안'}</span><strong>초안 v{workspace.draft_version}</strong><span>마지막 업데이트 {new Date(workspace.updated_at).toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' })}</span><span>{localProjectDirectory ? `컴퓨터 폴더 · ${localProjectDirectory.name}` : '우리들의 개발일지 작업 공간에 저장 중'}</span></aside>
               </div>
               <div className="project-overview-stats" aria-label="프로젝트 요약">
                 <button type="button" onClick={() => setWorkspaceSection('code')} aria-label={`파일 ${workspace.files.length}개, 코드 편집 열기`}><span>파일</span><strong>{workspace.files.length}</strong><small>프로젝트 코드와 문서 <b>열기 →</b></small></button>
@@ -3200,16 +3200,16 @@ export default function App() {
               </div>
             </section>
             <section className="project-collaborators-card" hidden={workspaceSection !== 'team'}>
-              <div className="project-collaborators-heading"><div><p className="eyebrow">함께 작업</p><h2>프로젝트 팀원</h2><p>팀원은 각자 WebLink 계정으로 같은 초안을 열어 이어서 작업할 수 있어요.</p></div><span>{projectEventsConnected ? `현재 ${onlineProjectMemberIds.length}명 접속 · 팀원 ${projectMembers.length}명` : `팀원 ${projectMembers.length}명 · 실시간 알림 연결 대기 · 주기 갱신 중`}</span></div>
+              <div className="project-collaborators-heading"><div><p className="eyebrow">함께 작업</p><h2>프로젝트 팀원</h2><p>팀원은 각자 우리들의 개발일지 계정으로 같은 초안을 열어 이어서 작업할 수 있어요.</p></div><span>{projectEventsConnected ? `현재 ${onlineProjectMemberIds.length}명 접속 · 팀원 ${projectMembers.length}명` : `팀원 ${projectMembers.length}명 · 실시간 알림 연결 대기 · 주기 갱신 중`}</span></div>
               {canManageProject && <div className="team-invite-composer">
                 <button className="secondary-button" type="button" aria-expanded={memberComposerOpen} aria-controls="team-invite-form" onClick={() => setMemberComposerOpen(open => !open)}>{memberComposerOpen ? '초대 작성 접기' : '팀원 초대'}</button>
                 {memberComposerOpen && <form id="team-invite-form" className="project-member-form" onSubmit={event => { if (memberInviteMode === 'DIRECT') void addProjectMember(event); else { event.preventDefault(); void createProjectInviteLink() } }}>
                   <fieldset className="team-invite-method"><legend>초대 방식</legend><label><input type="radio" name="team-invite-method" checked={memberInviteMode === 'LINK'} onChange={() => setMemberInviteMode('LINK')} disabled={projectBusy} />초대 링크로 참여</label><label><input type="radio" name="team-invite-method" checked={memberInviteMode === 'DIRECT'} onChange={() => setMemberInviteMode('DIRECT')} disabled={projectBusy} />가입 계정 바로 추가</label></fieldset>
-                  <p className="team-invite-explainer">{memberInviteMode === 'LINK' ? '입력한 이메일 계정으로 수락할 수 있는 7일 유효 링크를 만듭니다. 메일 전송이 설정되어 있으면 초대 이메일도 발송됩니다.' : '이 WebLink 서버에 이미 가입한 계정에 즉시 권한을 부여합니다. 초대 수락이나 이메일 발송은 없습니다.'}</p>
-                  <label>WebLink 계정 이메일<input autoFocus type="email" value={memberEmail} onChange={(event) => setMemberEmail(event.target.value)} placeholder="친구의 이메일" required maxLength={320} disabled={projectBusy} /></label>
+                  <p className="team-invite-explainer">{memberInviteMode === 'LINK' ? '입력한 이메일 계정으로 수락할 수 있는 7일 유효 링크를 만듭니다. 메일 전송이 설정되어 있으면 초대 이메일도 발송됩니다.' : '이 우리들의 개발일지 서버에 이미 가입한 계정에 즉시 권한을 부여합니다. 초대 수락이나 이메일 발송은 없습니다.'}</p>
+                  <label>우리들의 개발일지 계정 이메일<input autoFocus type="email" value={memberEmail} onChange={(event) => setMemberEmail(event.target.value)} placeholder="친구의 이메일" required maxLength={320} disabled={projectBusy} /></label>
                   <label>권한<select value={memberRole} onChange={(event) => setMemberRole(event.target.value as 'EDITOR' | 'VIEWER')} disabled={projectBusy}><option value="EDITOR">편집 가능</option><option value="VIEWER">보기 전용</option></select></label>
                   <button className="primary-button" type="submit" disabled={projectBusy || !memberEmail.trim()}>{projectBusy ? '처리 중…' : memberInviteMode === 'LINK' ? '초대 링크 만들기' : '팀원 추가'}</button>
-                  <small>같은 WebLink 서버에 접속해야 함께 작업할 수 있어요. 다른 컴퓨터에서 별도로 실행한 서버와는 계정이 공유되지 않습니다.</small>
+                  <small>같은 우리들의 개발일지 서버에 접속해야 함께 작업할 수 있어요. 다른 컴퓨터에서 별도로 실행한 서버와는 계정이 공유되지 않습니다.</small>
                 </form>}
                 {projectInviteLink && <div className="project-invite-link"><label>최근 만든 초대 링크<input aria-label="프로젝트 초대 링크" readOnly value={projectInviteLink} onFocus={(event) => event.currentTarget.select()} /></label><button className="secondary-button" type="button" onClick={() => void navigator.clipboard.writeText(projectInviteLink).then(() => setProjectNotice('초대 링크를 클립보드에 복사했습니다.')).catch(() => setProjectError('클립보드 접근이 막혔습니다. 링크 입력란을 선택해 복사해 주세요.'))}>링크 복사</button></div>}
               </div>}
@@ -3348,7 +3348,7 @@ export default function App() {
               <div className="run-output-heading"><strong>실행 결과 · {projectRunLabels[runResult.status]}</strong><button type="button" className="run-output-close" onClick={() => setRunOutputHidden(true)} aria-label="실행 결과 닫기" title="닫기">×</button></div>
               <p>{projectRunTime(runResult.created_at)} · 서버에 저장된 실행 기록입니다.</p>
               <p role="status">{runSnapshot.current?.runId === runResult.id ? runSnapshot.current.files === JSON.stringify(workspace.files) ? '실행을 요청한 코드와 현재 편집 내용이 같아요.' : '실행을 요청한 뒤 코드가 바뀌었어요. 아래 출력은 변경 전 코드의 결과입니다.' : '저장된 코드의 실행 결과입니다. 현재 편집 내용과의 일치를 확인한 기록은 아닙니다.'}</p>
-              <button type="button" className="secondary-button" onClick={() => { const url = URL.createObjectURL(new Blob([JSON.stringify(runResult, null, 2)], { type: 'application/json;charset=utf-8' })); const link = document.createElement('a'); link.href = url; link.download = `WebLink-실행-${runResult.id}.json`; link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000) }}>이 실행 기록 내려받기</button>
+              <button type="button" className="secondary-button" onClick={() => { const url = URL.createObjectURL(new Blob([JSON.stringify(runResult, null, 2)], { type: 'application/json;charset=utf-8' })); const link = document.createElement('a'); link.href = url; link.download = `우리들의 개발일지-실행-${runResult.id}.json`; link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000) }}>이 실행 기록 내려받기</button>
               <p><b>실제 출력</b></p><pre>{runResult.stdout || (projectRunPending ? '(실행 결과를 기다리는 중)' : '(출력 없음)')}</pre><p><b>오류</b></p><pre>{runResult.stderr || (runResult.failure_category ? `실패 유형: ${runResult.failure_category}` : '(오류 없음)')}</pre><p><b>종료 코드</b> {runResult.exit_code ?? (projectRunPending ? '아직 없음' : '기록 없음')}</p>
               {runResult.status === 'FAILED' && <form className="debug-notes" onSubmit={saveDebugNotes}><h3>오류를 되짚어 보기</h3><p className="debug-explainer">실행 오류를 보고 예상 결과와 원인에 대한 생각을 적어 두면, 이 실행에 연결해 저장하고 나중에 이어서 볼 수 있어요.</p><label>어떤 결과를 예상했나요?<textarea value={expectedOutput} onChange={(event) => setExpectedOutput(event.target.value)} rows={2} maxLength={16384} /></label><label>왜 이런 결과가 나왔다고 생각하나요?<textarea value={debugHypothesis} onChange={(event) => setDebugHypothesis(event.target.value)} rows={3} required maxLength={4000} placeholder="오류가 난 이유를 추측해서 적어 보세요." /></label><p className="ai-privacy-note">AI 힌트를 요청하면 main.py 일부, 실행 오류, 예상 결과와 가설이 AI 제공자에게 전달됩니다. 코드는 대신 고치지 않아요.</p><div className="debug-actions"><button className="secondary-button" type="submit" disabled={projectBusy || aiBusy || !debugHypothesis.trim()}>{debugSaved ? '디버깅 기록 업데이트' : '디버깅 기록 저장'}</button><button className="primary-button" type="button" onClick={requestDebugHint} disabled={projectBusy || aiBusy || !debugHypothesis.trim()}>{aiBusy ? '힌트를 생각하고 있어요…' : 'AI 디버깅 힌트'}</button></div>{debugSaved && <span role="status">이 실행에 대한 디버깅 기록을 저장했어요.</span>}{debugHint && <div className="ai-hint" role="status"><strong>{debugHint.summary}</strong><p>{debugHint.hint}</p><em>{debugHint.next_question}</em></div>}</form>}
             </section>}
@@ -3381,7 +3381,7 @@ export default function App() {
                 <div className="monaco-editor-container" ref={editorPanel}>
                   {selectedPath ? <Suspense fallback={<div className="editor-empty">VS Code 편집기를 불러오는 중…</div>}><MonacoCodeEditor path={`project/${user.id}/${workspace.id}/${selectedPath}`} initialLine={editorJump?.path === selectedPath ? editorJump.line : undefined} initialColumn={editorJump?.path === selectedPath ? editorJump.column : undefined} focusOnReveal={editorJump?.path === selectedPath && editorJump.focus} revealToken={editorJump?.path === selectedPath ? editorJump.requestId : undefined} value={workspace.files.find((file) => file.path === selectedPath)?.content ?? ''} readOnly={projectBusy || isProjectReadOnly} onCursorChange={projectView.onCursor} onChange={(value) => updateProjectFile(value)} /></Suspense> : <div className="editor-empty">왼쪽에서 파일을 선택하거나 새 파일을 추가하세요.</div>}
                 </div>
-                <div className="editor-statusbar"><span>WebLink 편집기</span><span>{selectedPath ? editorLanguage(selectedPath) : '일반 텍스트'}</span><span>Ctrl+P 파일 · Ctrl+Shift+F 전체 검색 · Ctrl+S 저장 · Ctrl+Enter 실행 · Ctrl+W 닫기</span></div>
+                <div className="editor-statusbar"><span>우리들의 개발일지 편집기</span><span>{selectedPath ? editorLanguage(selectedPath) : '일반 텍스트'}</span><span>Ctrl+P 파일 · Ctrl+Shift+F 전체 검색 · Ctrl+S 저장 · Ctrl+Enter 실행 · Ctrl+W 닫기</span></div>
               </section>
             </div>
             <div hidden={workspaceSection !== 'code'}><ProjectChangeReview key={`${user.id}:${workspace.id}`} files={workspace.files} base={projectDraftSnapshot?.baseAnswers} version={projectDraftSnapshot?.version ?? workspace.draft_version} modelScope={`review/${user.id}/${workspace.id}`} dirty={projectDirty} paused={projectRecovery.paused} blocked={projectBusy || isProjectReadOnly || Boolean(projectRecovery.pending)} onPause={projectRecovery.pause} onResume={projectRecovery.resume} onOpen={navigateProjectFile} /></div>
@@ -3465,11 +3465,11 @@ export default function App() {
 
   return (
     <main className="welcome auth-page">
-      <button className="auth-home-link" type="button" onClick={() => setShowLanding(true)}>← WebLink 홈</button>
-      <div className="brand-mark" aria-hidden="true">W</div>
+      <button className="auth-home-link" type="button" onClick={() => setShowLanding(true)}>← 우리들의 개발일지 홈</button>
+      <div className="brand-mark" aria-hidden="true">개</div>
       <p className="eyebrow">LEARN BY BUILDING</p>
       <h1>{mode === 'signup' ? '배우고, 만들고, 이해해요.' : '다시 만나 반가워요.'}</h1>
-      <p className="intro">WebLink에서 소프트웨어를 직접 만들며 배워 보세요.</p>
+      <p className="intro">우리들의 개발일지에서 소프트웨어를 직접 만들며 배워 보세요.</p>
       {sessionExpired && <p className="session-notice" role="status">로그인 세션이 만료되었거나 인증 정보를 확인하지 못했어요. 기존 계정으로 다시 로그인해 주세요. 이 창의 작성 내용은 유지되지만, 새로고침하면 저장하지 않은 내용이 사라질 수 있어요.</p>}
       <form className="auth-form" onSubmit={handleSubmit}>
         {mode === 'signup' && (
