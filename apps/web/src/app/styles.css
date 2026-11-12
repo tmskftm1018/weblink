@@ -1233,3 +1233,75 @@ html:has(.landing-page) { scroll-behavior: smooth; scroll-snap-type: y mandatory
 .task-detail-panel .task-checklist-form input::placeholder, .task-detail-panel .task-comment-form textarea::placeholder { color: #aaa; }
 .task-detail-panel .task-checklist-list li > button { width: 28px; height: 28px; flex-basis: 28px; background: #252525; color: #ddd; }
 .task-detail-panel .task-checklist-list li input { width: 16px; height: 16px; }
+
+/* Comfortable neutral palette and roomier authenticated app screens. */
+:root {
+  --color-ink: #f2f2f2;
+  --color-muted: #b7b7b7;
+  --color-accent: #e5e5e5;
+  --color-border: #3a3a3a;
+  --color-surface: #222;
+  --color-canvas: #161616;
+}
+.learning-shell { background: #161616; color: #f2f2f2; }
+.learning-topbar { border-bottom: 1px solid #303030; background: #1d1d1d; box-shadow: none; }
+.topbar-brand { color: #f2f2f2; }
+.account-menu { color: #c4c4c4; }
+.account-menu button { border-color: #454545; background: #292929; color: #eee; }
+.account-menu button:hover { background: #353535; }
+.topbar-nav button { color: #bcbcbc; }
+.topbar-nav button.active { background: #353535; color: #fff; }
+.learning-main { width: min(1480px, 100%); grid-template-columns: minmax(250px, 290px) minmax(0, 1fr); gap: clamp(28px, 3vw, 46px); padding: 38px clamp(22px, 3vw, 48px) 76px; }
+.project-list-main, .workspace-main { width: min(1480px, 100%); padding: 38px clamp(22px, 3vw, 48px) 76px; }
+.connections-main { width: min(1320px, 100%); padding: 38px clamp(22px, 3vw, 48px) 76px; }
+.project-heading { max-width: 780px; }
+.connections-heading { max-width: 900px; }
+.connection-card { width: 100%; max-width: none; }
+.course-rail, .connection-card, .project-create-form, .project-task-board,
+.workspace-grid, .project-storage-hub { border-color: #383838; background: #222; box-shadow: 0 8px 24px #0003; }
+.project-storage-hub { background: #222; }
+.project-card, .flow-step, .challenge-card, .storage-provider-card,
+.project-task-card, .project-overview-panel, .project-readme-panel,
+.project-progress-panel { border-color: #393939; background: #292929; color: #eee; box-shadow: none; }
+.course-picker button, .lesson-nav.selected, .project-task-column,
+.task-discussion-panel, .block-palette, .block-stack-panel,
+.storage-provider-icon, .project-card-icon { border-color: #3d3d3d; background: #2b2b2b; color: #eee; }
+.course-picker button.active, .lesson-nav.selected { border-color: #5a5a5a; background: #383838; color: #fff; }
+.course-progress > div { background: #3a3a3a; }
+.course-progress i { background: #bcbcbc; }
+.lesson-number { border-color: #555; }
+.lesson-nav { color: #c4c4c4; }
+.objective-card { border-left-color: #aaa; background: #2a2a2a; }
+.block-goal, .block-palette, .block-stack-panel { background: #252525; }
+.block-stack { border-color: #505050; background: #1c1c1c; }
+.code-block, .stacked-block { border-color: #4a4a4a; border-left-color: #aaa; background: #303030; color: #f2f2f2; }
+.code-block code, .stacked-block code { color: #eee; }
+.assembled-code { background: #111; color: #eee; }
+.project-heading > p:last-child, .workspace-heading p, .connections-heading > p:last-child,
+.lesson-summary, .lesson-copy, .course-rail > p:not(.eyebrow),
+.project-card-copy small, .storage-provider-card p, .storage-provider-card small,
+.connection-card p, .connection-footnote { color: #b7b7b7; }
+.project-search input, .project-select-label select, .project-create-form input,
+.project-create-form textarea, .new-entry-form input, .new-entry-form select,
+.answer-form input, .task-board-filters input, .task-board-filters select,
+.project-task-card-controls select { border-color: #484848; background: #191919; color: #f2f2f2; }
+.project-search input:focus, .project-select-label select:focus,
+.project-create-form input:focus, .project-create-form textarea:focus,
+.answer-form input:focus, .task-board-filters input:focus { border-color: #aaa; box-shadow: 0 0 0 2px #aaa2; }
+.project-storage-disclosure > summary, .project-task-board-heading > span,
+.task-board-heading-actions > span, .task-filter-count { border-color: #3d3d3d; background: #292929; color: #ddd; }
+.project-count, .project-member-role, .project-storage-badge,
+.connection-badge, .github-source-state, .storage-state { background: #303030; color: #ddd; }
+.project-card:hover, .storage-provider-card:hover { border-color: #666; background: #303030; }
+.landing-header { border-bottom: 0; }
+@media (max-width: 980px) {
+  .learning-main { grid-template-columns: minmax(220px, 260px) minmax(0, 1fr); gap: 26px; }
+}
+@media (max-width: 760px) {
+  .learning-main { grid-template-columns: 1fr; gap: 24px; padding: 28px 22px 58px; }
+  .project-list-main, .workspace-main, .connections-main { padding: 30px 22px 58px; }
+  .course-rail { position: static; max-height: none; }
+}
+@media (max-width: 480px) {
+  .learning-main, .project-list-main, .workspace-main, .connections-main { padding-inline: 16px; }
+}
