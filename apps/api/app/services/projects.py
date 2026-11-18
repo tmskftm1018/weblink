@@ -57,8 +57,8 @@ from app.schemas.projects import (
 MAX_DRAFT_BYTES = 1_000_000
 MAX_ARCHIVE_BYTES = 1_500_000
 STARTER_FILES = [
-    {"path": "README.md", "content": "# My WebLink Project\n\n내가 만들고 싶은 것을 여기에 적어 보세요.\n"},
-    {"path": "main.py", "content": 'print("Hello from WebLink!")\n'},
+    {"path": "README.md", "content": "# 내 개발일지 프로젝트\n\n내가 만들고 싶은 것을 여기에 적어 보세요.\n"},
+    {"path": "main.py", "content": 'print("우리들의 개발일지에 오신 것을 환영합니다!")\n'},
 ]
 
 
@@ -570,7 +570,7 @@ def export_project_archive(db: Session, user: User, project_id: UUID) -> tuple[b
     safe_name = unicodedata.normalize("NFKC", workspace.name)
     safe_name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", safe_name).strip(" .")
     if not safe_name:
-        safe_name = "weblink-project"
+        safe_name = "development-journal-project"
     return buffer.getvalue(), f"{safe_name[:100]}.zip"
 
 

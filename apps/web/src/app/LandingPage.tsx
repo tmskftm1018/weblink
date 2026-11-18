@@ -1,5 +1,5 @@
 type LandingPageProps = {
-  onEnter: (mode: 'login' | 'signup', destination?: 'lesson' | 'projects' | 'connections') => void
+  onEnter: (mode: 'login' | 'signup', destination?: 'lesson' | 'projects') => void
   isAuthenticated?: boolean
 }
 
@@ -17,7 +17,7 @@ export default function LandingPage({ onEnter, isAuthenticated = false }: Landin
           <div className="onepage-intro">
             <h1 id="landing-title">우리들의 개발일지</h1>
             <p className="onepage-tagline">배운 코드를 작동하는 경험으로.</p>
-            <p className="onepage-lead">블록 코딩부터 Python 프로젝트까지, 직접 만들고 실행하며 개발을 배우는 공간입니다.</p>
+            <p className="onepage-lead">화면을 만들고 API와 데이터베이스를 연결하며 웹 개발을 배워요.</p>
             <button className="onepage-primary" type="button" onClick={() => onEnter(isAuthenticated ? 'login' : 'signup', isAuthenticated ? 'projects' : undefined)}>
               {isAuthenticated ? '내 프로젝트 열기' : '시작하기'} <span aria-hidden="true">→</span>
             </button>

@@ -50,7 +50,7 @@ def handoff(db, user, enrollment_id, node_id, expected_version, field):
     title = ("재고 목록" if node_id == "M10" else "할 일 목록") if field == "transfer_source" else ("나의 게시판" if node_id == "M10" else "나의 메모장")
     files = project_files(work.answers[field], work.answers[api_field], origin)
     workspace = projects.create_project_from_files(db, user,
-        ProjectCreateRequest(name=f"{title} · {node_id}", description="WebLink 학습 저장본에서 시작한 개인 React·FastAPI·SQLite 프로젝트"),
+        ProjectCreateRequest(name=f"{title} · {node_id}", description="우리들의 개발일지 학습 저장본에서 시작한 개인 React·FastAPI·SQLite 프로젝트"),
         files, commit=False)
     revision = workspace.revisions[0]
     db.add(LearningProjectExport(enrollment_id=enrollment.id, node_id=node_id, field=field,

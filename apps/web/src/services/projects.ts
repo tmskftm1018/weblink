@@ -91,7 +91,7 @@ async function request<T>(path: string, method = 'GET', body?: unknown, options?
     })
   } catch {
     if (options?.signal?.aborted) throw new DOMException('요청 기다리기 중지', 'AbortError')
-    throw new ProjectRequestError('WebLink API 요청이 브라우저에서 차단됐거나 서버에 연결하지 못했습니다. 서버 상태와 브라우저 연결 정책을 확인해 주세요.', 0)
+    throw new ProjectRequestError('우리들의 개발일지 API 요청이 브라우저에서 차단됐거나 서버에 연결하지 못했습니다. 서버 상태와 브라우저 연결 정책을 확인해 주세요.', 0)
   }
   if (!response.ok) {
     const payload = await response.json().catch(() => null) as { detail?: unknown } | null
@@ -166,7 +166,7 @@ export const projectService = {
     const safeName = projectName.trim()
       .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '_')
       .replace(/[. ]+$/g, '')
-      .slice(0, 100) || 'WebLink-Project'
+      .slice(0, 100) || '우리들의 개발일지 프로젝트'
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url

@@ -138,3 +138,21 @@ test('current-course errors identify paired code, explain choices and handle mal
   assert.equal(learningValidationMessage('/lessons/qa/submit', [{ type: 'missing' }]), null)
   assert.equal(learningValidationMessage('/enrollments/qa/path', '서버의 구체적인 안내'), null)
 })
+
+
+test('first lesson steps do not bypass diagnostics, concept or reopen requirements', () => {
+  const setupNode = { id: 'M01', assignment: { has_transfer: false, transfer_required: false },
+    fields: ['project_goal', 'experience', 'help_mode', 'diagnostic_input', 'diagnostic_validation', 'diagnostic_storage'].map(id => ({ id, label: id, kind: 'choice', choices: ['A', 'B'] })),
+    concept_check: { choices: ['A', 'B'] } }
+  const initial = { project_goal: 'A', experience: 'A', help_mode: 'A' }
+  assert.deepEqual(submissionGaps(setupNode, initial, { reopened: false }).map(item => item.id), ['diagnostic_input', 'diagnostic_validation', 'diagnostic_storage', 'concept_answer', 'reopen'])
+  const complete = { ...initial, diagnostic_input: 'A', diagnostic_validation: 'A', diagnostic_storage: 'A', concept_answer: 'A' }
+  assert.deepEqual(submissionGaps(setupNode, complete, { reopened: true }), [])
+})
+
+test('one-file editor tabs still require both API and screen answers', () => {
+  const pairedNode = { id: 'M10', assignment: { has_transfer: false, transfer_required: false },
+    fields: [{ id: 'source', label: '화면', kind: 'code', min_length: 20 }, { id: 'api_source', label: 'API', kind: 'code', min_length: 20 }],
+    concept_check: { choices: ['A'] } }
+  assert.deepEqual(submissionGaps(pairedNode, { source: 'x'.repeat(20), concept_answer: 'A' }, { reopened: true }).map(item => item.id), ['api_source'])
+})

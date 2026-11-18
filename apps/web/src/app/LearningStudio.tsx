@@ -1,3 +1,7 @@
+import { LessonPhase, lessonFieldPhase, lessonPhaseLabels } from '../services/learningPhases'
+import { setupFieldStep } from '../services/learningSetup'
+import { missionTitle, unitTitle } from '../services/learningPresentation'
+import LearningMissionIntro from './LearningMissionIntro'
 import { MutableRefObject, useEffect, useRef, useState } from 'react'
 import { Curriculum, Enrollment, LearningExecutionSummary, LearningLevel, LearningSubjectId, LearningPath, LearningNode, LearningRequestError, LearningWork, LearningWorkspace, ProjectJump, curriculumService } from '../services/learning'
 import { LearningDraft, clearLearningDraft, learningDraftKey as draftKey, learningSnapshot, matchesLearningWork, readLearningDraft, writeLearningDraft } from '../services/learningDrafts'
@@ -36,24 +40,6 @@ function FoundationPractice({ id }: { id: string }) {
   return <div className="learning-demo"><label>{id === 'C04' ? 'greet 함수에 전달할 이름' : '인사말에 사용할 이름'}<input value={value} onChange={(event) => { setValue(event.target.value); setResult(null) }} maxLength={80} /></label>{id === 'C04' && <pre>{'function greet(name) {\n  return `안녕하세요, ${name}님!`;\n}'}</pre>}<button type="button" onClick={() => setResult(value.trim() ? `안녕하세요, ${value.trim()}님!` : '이름을 먼저 입력해 주세요.')}>인사말 만들기</button>{result !== null && <output>{result}</output>}</div>
 }
 
-function LearningFlow({ nodeId }: { nodeId: string }) {
-  const flows: Record<string, string[]> = {
-    M01: ['내 목표 정하기', '→', '서버에 저장', '→', '다시 열고 확인'],
-    M03: ['label · 화면의 이름', '→ for / id 연결', 'input · 입력 받기'],
-    M04: ['submit', '→ trim · 검증', '→ 오류 안내 / 저장 호출'],
-    M05: ['입력', '→ 새 state 배열', '→ React 목록'],
-    M06: ['HTTP 요청', '→ FastAPI', '→ 메모리 목록', '→ JSON 응답'],
-    M07: ['HTTP 요청', '→ FastAPI', '→ 메모리 목록', '→ JSON 응답'],
-    M08: ['Python 코드', '→ INSERT · 저장', '↔ SQLite', '→ SELECT · 조회'],
-    M09: ['HTTP 요청', '→ FastAPI', '↔ SQLite', '→ JSON 응답'],
-  }
-  const common = ['화면 UI', '→ 요청', 'API · 검증', '↔', 'DB · 저장']
-  const explanation = nodeId === 'M08' ? 'Python 스크립트에서 SQL을 실행하고 DB에 저장된 행을 조회합니다.'
-    : nodeId === 'M09' ? 'API가 SQLite에 저장하고, DB에서 읽은 결과를 JSON으로 응답합니다.'
-    : !flows[nodeId] ? 'UI는 요청을 보내고, API는 입력을 검사한 뒤 DB를 다룹니다. API의 응답을 받은 UI가 결과를 보여 줍니다.' : ''
-  return <><div className="learning-studio__flow">{(flows[nodeId] ?? common).map((text, index) => <span key={index}>{text}</span>)}</div>{explanation && <p>{explanation}</p>}</>
-}
-
 function ManualAI({ node, answers, feedback }: { node: LearningNode; answers: Record<string, string>; feedback: LearningWork['feedback'] }) {
   const [includeAnswers, setIncludeAnswers] = useState(false)
   const [reviewed, setReviewed] = useState(false)
@@ -72,6 +58,12 @@ export default function LearningStudio({ userId, onLegacy, beforeLeaveRef, onOpe
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null)
   const [workspace, setWorkspace] = useState<LearningWorkspace | null>(null)
   const [node, setNode] = useState<LearningNode | null>(null)
+  const [setupStep, setSetupStep] = useState(0)
+  const [selectedPhase, setSelectedPhase] = useState<LessonPhase | null>(null)
+  useEffect(() => {
+    setSetupStep(0)
+    setSelectedPhase(null)
+  }, [node?.id])
   const [work, setWork] = useState<LearningWork | null>(null)
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [returnNode, setReturnNode] = useState('M01')
@@ -241,17 +233,37 @@ export default function LearningStudio({ userId, onLegacy, beforeLeaveRef, onOpe
     return saved
   }
 
+  function openPhase(phase: LessonPhase) {
+    setSelectedPhase(phase)
+    window.requestAnimationFrame(() => {
+      const target = document.getElementById(`lesson-phase-${phase}`)
+      target?.scrollIntoView({ block: 'start' })
+      target?.focus({ preventScroll: true })
+    })
+  }
+
   function goToAnswer(id: string) {
-    const target = document.getElementById(`learning-field-${id}`)
-    if (!target) return
-    let parent = target.parentElement
-    while (parent) {
-      if (parent instanceof HTMLDetailsElement) parent.open = true
-      parent = parent.parentElement
+    if (!node) return
+    if (node.id === 'M01' && node.assignment.version === 'practice-v2') setSetupStep(setupFieldStep(id))
+    if (node.fields.some(field => field.kind === 'code')) {
+      setSelectedPhase(lessonFieldPhase(id, node.fields.find(field => field.id === id)?.kind))
     }
-    target.scrollIntoView({ block: 'center' })
-    const control = target.matches('button') ? target : target.querySelector<HTMLElement>('select, textarea, input, [role="textbox"]')
-    ;(control ?? target).focus({ preventScroll: true })
+    window.requestAnimationFrame(() => {
+      const tab = document.querySelector<HTMLButtonElement>(`[data-learning-field="${id}"]`)
+      tab?.click()
+      window.requestAnimationFrame(() => {
+        const target = document.getElementById(`learning-field-${id}`)
+        if (!target) return
+        let parent = target.parentElement
+        while (parent) {
+          if (parent instanceof HTMLDetailsElement) parent.open = true
+          parent = parent.parentElement
+        }
+        target.scrollIntoView({ block: 'center' })
+        const control = target.matches('button') ? target : target.querySelector<HTMLElement>('select, textarea, input, [role="textbox"]')
+        ;(control ?? target).focus({ preventScroll: true })
+      })
+    })
   }
 
   async function openHandoff(field: string) {
@@ -417,6 +429,17 @@ export default function LearningStudio({ userId, onLegacy, beforeLeaveRef, onOpe
   const assignment = work.assignment ?? node.assignment
   const transferActive = assignment.transfer_required || answers.transfer_mode === '전이 과제도 도전하기'
   const visibleFields = node.fields.filter(field => !field.optional || transferActive || (field.practice_note && !field.id.startsWith('transfer_')))
+  const hasCode = visibleFields.some(field => field.kind === 'code')
+  const hasBaseline = visibleFields.some(field => field.id === 'baseline_source')
+  const phases: LessonPhase[] = [
+    ...(hasBaseline ? ['baseline' as const] : []),
+    'practice',
+    ...(assignment.has_transfer ? ['transfer' as const] : []),
+    'review',
+  ]
+  const phase = hasCode ? selectedPhase ?? phases[0] : null
+  const inReview = !phase || phase === 'review'
+  const forwardPhase = phase === 'baseline' ? 'practice' : phase === 'practice' && transferActive ? 'transfer' : 'review'
   const nextFoundation = isFoundation ? pathProfile?.foundation_ids.find((id, index, ids) => index > ids.indexOf(node.id) && workspace.foundations.some(item => item.id === id && item.status !== 'PASSED')) : undefined
   if (page !== 'mission') return <main className="learning-studio" aria-busy={busy}>
     {offline && <p className="learning-studio__notice" role="status">인터넷 연결이 끊긴 것으로 감지했어요. 수업을 열거나 기록을 내려받으려면 서버 연결이 필요해요.</p>}
@@ -424,19 +447,36 @@ export default function LearningStudio({ userId, onLegacy, beforeLeaveRef, onOpe
     {notice && <p className="learning-studio__notice" role="status">{notice}</p>}
     <LearningHome page={page} catalogue={catalogue} workspace={workspace} currentId={node.id} busy={busy} recovery={Boolean(recovery)} pathProfile={pathProfile} pathError={pathError} onPathReload={() => setPathRetry(value => value + 1)} onPathSave={(level, subjects) => void savePath(level, subjects)} onPage={target => void openHome(target)} onOpen={id => void openNode(id)} onLegacy={onLegacy} onDownload={() => void downloadPortfolio()} />
   </main>
-  return <main className="learning-studio" aria-busy={busy}>
-    {offline && <aside className="learning-studio__notice" role="status">인터넷 연결이 끊긴 것으로 감지했어요. 편집은 계속할 수 있지만 서버 저장·실행은 연결 후 다시 시도해 주세요. 현재 작성 내용을 내려받아 보관할 수 있어요.</aside>}
-    <nav className="learning-home__nav" aria-label="학습 공간"><button disabled={busy} onClick={() => void openHome('home')}>← 학습 홈</button><button disabled={busy} onClick={() => void openHome('records')}>학습 기록</button></nav>
-    {!isFoundation && <section className="learning-path__mode" aria-label="현재 미션 과제 기준"><strong>{assignment.title}</strong><p>{assignment.summary}</p>{assignment.has_transfer && <p>다른 문제에 적용하기: {assignment.transfer_required ? '필수' : '선택 · 본 과제만으로 제출 가능'}</p>}{assignment.steps.length > 0 && <ol>{assignment.steps.map(step => <li key={step}>{step}</li>)}</ol>}{assignment.pinned && pathProfile?.level && assignment.level !== pathProfile.level && !['M01', 'M02'].includes(node.id) && <p role="status">학습 홈의 현재 선택은 {pathProfile.levels.find(level => level.id === pathProfile.level)?.title}입니다. 이 미션은 처음 저장한 {assignment.title} 기준으로 이어가며, 난이도를 바꿔도 기존 답안과 완료 기준은 바뀌지 않습니다.</p>}<small>{assignment.pinned ? '이 미션에 저장된 과제 기준입니다. 학습 경로를 바꿔도 그대로 이어갑니다.' : '첫 초안 저장 시 이 과제 기준으로 고정됩니다. 다른 경로는 학습 홈에서 선택하세요.'}</small></section>}
-    <header className="learning-studio__heading"><div><p className="learning-studio__kicker">만들며 배우는 웹 개발</p><h1>{catalogue.title}</h1><p>{isFoundation ? '필요한 개념을 연습한 뒤 미션으로 돌아가세요.' : `미션 ${workspace.completed_ids.length}/${availableCount}개 확인 완료 · 목표 확인 → 구현 → 실행 → 결과 확인`}</p></div></header>
+  const currentMission = workspace.missions.find(mission => mission.id === node.id)
+  const nearbyLessons = workspace.missions.filter(mission => mission.unit_id === currentMission?.unit_id)
+  return <main className="learning-studio journal-studio" aria-busy={busy}>
+    {offline && <aside className="learning-studio__notice" role="status">오프라인이에요. 편집 내용을 내려받거나 연결 후 저장·실행할 수 있어요.</aside>}
+    <div className="journal-studio__bar">
+      <nav aria-label="학습 공간"><button type="button" disabled={busy} onClick={() => void openHome('home')}>← 학습 홈</button><button type="button" disabled={busy} onClick={() => void openHome('records')}>학습 기록</button></nav>
+      <div className="journal-studio__progress"><label htmlFor="journal-progress">수업 완료 {workspace.completed_ids.length}/{availableCount}</label><progress id="journal-progress" value={workspace.completed_ids.length} max={Math.max(availableCount, 1)} /></div>
+    </div>
     <div className="learning-studio__layout">
-      <aside className="learning-studio__rail" aria-label="학습 경로">
-        {catalogue.units.map((unit) => <section key={unit.id}><h2>{unit.title}</h2><ol>{workspace.missions.filter((mission) => mission.unit_id === unit.id).map((mission) => <li key={mission.id}><button aria-current={node.id === mission.id ? 'step' : undefined} disabled={editingBlocked || !mission.available || !mission.unlocked} onClick={() => void openNode(mission.id)}><span>{mission.id} · {mission.title}</span><small>{!mission.available ? '준비 중' : !mission.unlocked ? '선수 미션 확인 필요' : statusLabels[mission.status] ?? mission.status}</small></button></li>)}</ol></section>)}
-        <details><summary>필요할 때 · 기초 연습</summary>{workspace.foundations.map((foundation) => <button key={foundation.id} disabled={editingBlocked} onClick={() => void openNode(foundation.id)} aria-current={node.id === foundation.id ? 'step' : undefined}>{foundation.id} · {foundation.title}<small>{statusLabels[foundation.status]}</small></button>)}</details>
+      <aside className="learning-studio__rail journal-notebook" aria-label="수업 노트">
+        {isFoundation ? <header className="journal-notebook__intro"><h1>{node.title}</h1><p>{node.objective}</p><p>{node.task}</p><button type="button" disabled={editingBlocked} onClick={() => void openNode(returnNode)}>← {missionTitle(returnNode, '이전 수업')}</button>{nextFoundation && <button type="button" disabled={editingBlocked} onClick={() => void openNode(nextFoundation)}>다음 기초 연습</button>}</header> :
+          <LearningMissionIntro key={node.id} nodeId={node.id} fallback={node.title} />}
+        <details className="learning-help"><summary>힌트</summary>{hintText && <p role="status">{hintText}</p>}<button disabled={editingBlocked || hintLevel >= 4} onClick={() => void action(async () => { const result = await curriculumService.hint(enrollment.id, node.id, hintLevel + 1); setHintLevel(result.level); setHintText(result.text) })}>{hintLevel >= 4 ? '모든 힌트를 확인했어요' : hintLevel ? '다음 힌트' : '힌트 보기'}</button><p>{node.recovery}</p>{node.foundation_ids.map((id) => <button key={id} disabled={editingBlocked} onClick={() => void openNode(id)}>{workspace.foundations.find(item => item.id === id)?.title ?? '기초 설명'}</button>)}</details>
+        {!isFoundation && <details className="learning-studio__section"><summary>실습 조건</summary><p>{node.task}</p>{node.practice_guide && <><ol>{node.practice_guide.steps.map(step => <li key={step}>{step}</li>)}</ol><p><strong>기대 결과 </strong>{node.practice_guide.expected}</p></>}</details>}
+        {nearbyLessons.length > 1 && <ol className="journal-lesson-list" aria-label="이 단원의 수업">
+          {nearbyLessons.map(mission => <li key={mission.id}>
+            <button type="button" aria-current={node.id === mission.id ? 'step' : undefined} disabled={editingBlocked || !mission.available || !mission.unlocked} onClick={() => void openNode(mission.id)}>
+              <span className="journal-lesson-list__mark" aria-hidden="true">{mission.status === 'PASSED' ? '✓' : node.id === mission.id ? '•' : ''}</span>
+              <span>{missionTitle(mission.id, mission.title)}{!mission.unlocked && <small>앞 수업을 완료하면 열려요</small>}</span>
+            </button>
+          </li>)}
+        </ol>}
+        <details className="learning-studio__course-menu">
+          <summary>전체 수업 목록</summary>
+          {catalogue.units.map(unit => <section key={unit.id}><h2>{unitTitle(unit.mission_ids, unit.title)}</h2><ol>{workspace.missions.filter(mission => mission.unit_id === unit.id).map(mission => <li key={mission.id}><button type="button" aria-current={node.id === mission.id ? 'step' : undefined} disabled={editingBlocked || !mission.available || !mission.unlocked} onClick={() => void openNode(mission.id)}><span>{missionTitle(mission.id, mission.title)}</span><small>{!mission.available ? '준비 중' : !mission.unlocked ? '잠김' : statusLabels[mission.status] ?? mission.status}</small></button></li>)}</ol></section>)}
+        </details>
+        <details><summary>기초 연습</summary>{workspace.foundations.map(foundation => <button type="button" key={foundation.id} disabled={editingBlocked} onClick={() => void openNode(foundation.id)} aria-current={node.id === foundation.id ? 'step' : undefined}>{foundation.title}</button>)}</details>
+        {!isFoundation && <details className="learning-path__mode" aria-label="현재 수업 난이도"><summary>{assignment.title}</summary><p>{assignment.summary}</p>{assignment.has_transfer && <p>응용 과제 · {assignment.transfer_required ? '필수' : '선택 · 본 과제만으로 제출 가능'}</p>}{assignment.steps.length > 0 && <ol>{assignment.steps.map(step => <li key={step}>{step}</li>)}</ol>}{assignment.pinned && pathProfile?.level && assignment.level !== pathProfile.level && !['M01', 'M02'].includes(node.id) && <p role="status">학습 홈의 현재 선택은 {pathProfile.levels.find(level => level.id === pathProfile.level)?.title}입니다. 이 미션은 처음 저장한 {assignment.title} 기준으로 이어가며, 난이도를 바꿔도 기존 답안과 완료 기준은 바뀌지 않습니다.</p>}</details>}
       </aside>
-      <article className="learning-studio__lesson" key={node.id}>
-        <header><p className="learning-studio__kicker">{isFoundation ? '선택 기초 연습 · 미션 진도와 별도' : `${node.id} · 만들고 확인하는 미션`}</p><h2>{node.title}</h2><p>{node.objective}</p><p>{node.task}</p>{isFoundation && <><button disabled={editingBlocked} onClick={() => void openNode(returnNode)}>← {returnNode} 미션으로 돌아가기</button>{nextFoundation && <button disabled={editingBlocked} onClick={() => void openNode(nextFoundation)}>다음 추천 기초 · {nextFoundation}</button>}</>}</header>
-        {node.practice_guide && <section className="learning-studio__section"><h3>이번에 만들 결과 · {node.practice_guide.outcome}</h3><ol>{node.practice_guide.steps.map(step => <li key={step}>{step}</li>)}</ol><p><strong>이렇게 나오면 돼요: </strong>{node.practice_guide.expected}</p><details><summary>결과가 다르면 먼저 확인할 것</summary><p>{node.practice_guide.troubleshooting}</p></details></section>}
+      <article className="learning-studio__lesson journal-workspace" key={node.id} aria-label="실습 공간">
         {!isFoundation && assignment.version !== 'practice-v2' && work.version > 0 && work.status !== 'PASSED' && <aside className="learning-studio__notice"><p>반복 서술을 선택 메모로 줄인 실습 방식이 있어요. 코드와 작성 내용은 보존하고, 제출 기준을 전환한 뒤 다시 확인합니다. 완료를 자동으로 인정하지 않습니다.</p><button type="button" disabled={editingBlocked} onClick={() => void action(async () => { const saved = await persist(); const details = await curriculumService.upgradePractice(enrollment.id, node.id, saved.version); const draft = readLearningDraft(draftKey(userId, enrollment.id, node.id)); if (draft) clearLearningDraft(draftKey(userId, enrollment.id, node.id), draft); applyNode(details, enrollment.id); setWorkspace(await curriculumService.workspace(enrollment.id)); setNotice('작성한 코드를 유지하고 실습 방식으로 전환했어요. 목표와 실행 결과를 확인해 주세요.') })}>작성 내용 유지하고 실습 방식으로 전환</button></aside>}
         {error && <div className="learning-studio__error" role="alert"><strong>요청을 완료하지 못했어요</strong><p>{error}</p><p>지금 입력한 내용은 화면에 남아 있어요. 저장본을 다시 열기 전에 내려받을 수 있습니다.</p><button onClick={exportDraft}>현재 작성 내용 내려받기</button>{saveConflict && <button disabled={editingBlocked} onClick={() => void action(compareLatest)}>작성 내용 보관하고 최신 서버 답안과 비교</button>}</div>}
         {saveConflict && !error && !recovery && <aside className="learning-studio__notice" role="status"><strong>다른 창에서 이 답안을 저장했어요.</strong><p>현재 작성 내용은 유지됩니다. 최신 서버 답안과 비교한 뒤 저장을 이어가세요.</p><button disabled={busy} onClick={() => void action(compareLatest)}>작성 내용 보관하고 최신 서버 답안과 비교</button><button onClick={exportDraft}>현재 작성 내용 내려받기</button></aside>}
@@ -449,21 +489,33 @@ export default function LearningStudio({ userId, onLegacy, beforeLeaveRef, onOpe
           clearLearningDraft(draftKey(userId, enrollment.id, node.id), recovery)
           setRecovery(null); setAnswers(initialAnswers({ ...node, work })); setError(''); setSaveConflict(false); setNotice('서버 답안을 사용합니다.')
         }} />}
-        <details key={`${node.id}:${assignment.key}`} className="learning-studio__section learning-path__guidance" open={isFoundation || assignment.level !== 'EXPERIENCED'}><summary>1. 동작 원리 살펴보기</summary><p>{node.prediction}</p>{isFoundation ? <FoundationPractice key={node.id} id={node.id} /> : <LearningFlow nodeId={node.id} />}<details><summary>관찰할 내용</summary><p>{node.practice.expected_observation}</p></details></details>
+        {isFoundation && <section className="learning-studio__section"><FoundationPractice key={node.id} id={node.id} /></section>}
+        {phase && <nav className="journal-phases" aria-label="이 수업의 실습 단계">
+          {phases.map(item => <button type="button" key={item} aria-current={phase === item ? 'step' : undefined} disabled={editingBlocked} onClick={() => openPhase(item)}>
+            {item === 'practice' && hasBaseline ? '수정본 실습' : lessonPhaseLabels[item]}
+            {item === 'transfer' && <small>{assignment.transfer_required ? ' · 필수' : ' · 선택'}</small>}
+          </button>)}
+        </nav>}
         <form onSubmit={(event) => { event.preventDefault(); void action(async () => { await persist(); setNotice('서버에 초안을 저장했어요. 저장은 제출·완료와 별개입니다.'); setWorkspace(await curriculumService.workspace(enrollment.id)) }) }}>
-          <LearningWorkFields node={node} enrollmentId={enrollment.id} answers={answers} work={work} fields={visibleFields} history={executionHistory} feedback={feedback} validationIssues={validationIssues} disabled={editingBlocked} transferRequired={assignment.transfer_required} onEdit={edit} onRuntime={(field, signal) => runSavedRuntime(field, signal)} onJavaScript={runSavedJavaScript} />
-          <section className="learning-studio__section" id="learning-field-concept_answer" tabIndex={-1}><h3>{assignment.has_transfer ? 4 : 3}. 개념 확인</h3><fieldset disabled={editingBlocked}><legend>{node.concept_check.prompt}</legend>{node.concept_check.choices.map((choice) => <label className="learning-studio__choice" key={choice}><input type="radio" name="concept_answer" value={choice} checked={answers.concept_answer === choice} onChange={() => edit('concept_answer', choice)} />{choice}</label>)}</fieldset>{(validationIssues.concept_answer || feedback?.issues.concept_answer) && <p className="learning-studio__issue">{validationIssues.concept_answer || feedback?.issues.concept_answer}</p>}</section>
-          <div className="learning-studio__actions"><span>{dirty ? '저장 전 변경 있음' : work.version ? `서버 저장본 v${work.version}${work.updated_at ? ` · ${new Date(work.updated_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}` : ''}` : '아직 저장하지 않았어요'}</span><div><button type="submit" disabled={editingBlocked}>{busy ? '처리 중…' : '초안 저장'}</button><button id="learning-field-reopen" type="button" disabled={editingBlocked || !work.version || dirty} onClick={() => void action(async () => { applyNode(await curriculumService.node(enrollment.id, node.id), enrollment.id); setNotice('서버 저장본을 다시 불러왔어요.') })}>저장본 다시 열기</button><button className="learning-studio__primary" type="button" disabled={editingBlocked || !node.unlocked} onClick={() => void checkPractice()}>저장하고 실습 확인하기</button></div></div>
+          <LearningWorkFields node={node} enrollmentId={enrollment.id} answers={answers} work={work} fields={visibleFields} history={executionHistory} feedback={feedback} validationIssues={validationIssues} disabled={editingBlocked} transferRequired={assignment.transfer_required} phase={phase} setupStep={setupStep} onSetupStep={setSetupStep} onEdit={edit} onRuntime={(field, signal) => runSavedRuntime(field, signal)} onJavaScript={runSavedJavaScript} />
+          {phase && !inReview && <div className="journal-phase-actions">
+            <button type="submit" disabled={editingBlocked || !dirty}>초안 저장</button>
+            <button className="learning-studio__primary" type="button" disabled={editingBlocked} onClick={() => openPhase(forwardPhase)}>
+              {forwardPhase === 'practice' ? '수정본 실습' : lessonPhaseLabels[forwardPhase]} →
+            </button>
+          </div>}
+          <section id="lesson-phase-review" hidden={!inReview} tabIndex={-1} aria-label="실습 확인">
+          <section hidden={node.id === 'M01' && assignment.version === 'practice-v2' && setupStep !== 2} className="learning-studio__section" id="learning-field-concept_answer" tabIndex={-1}><h3>개념 확인</h3><fieldset disabled={editingBlocked}><legend>{node.concept_check.prompt}</legend>{node.concept_check.choices.map((choice) => <label className="learning-studio__choice" key={choice}><input type="radio" name="concept_answer" value={choice} checked={answers.concept_answer === choice} onChange={() => edit('concept_answer', choice)} />{choice}</label>)}</fieldset>{(validationIssues.concept_answer || feedback?.issues.concept_answer) && <p className="learning-studio__issue">{validationIssues.concept_answer || feedback?.issues.concept_answer}</p>}</section>
+          <div hidden={node.id === 'M01' && assignment.version === 'practice-v2' && setupStep !== 2} className="learning-studio__actions"><span>{dirty ? '저장 전 변경 있음' : work.version ? `서버 저장본 v${work.version}${work.updated_at ? ` · ${new Date(work.updated_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}` : ''}` : '아직 저장하지 않았어요'}</span><div><button type="submit" disabled={editingBlocked}>{busy ? '처리 중…' : '초안 저장'}</button>{node.id === 'M01' && <button id="learning-field-reopen" type="button" disabled={editingBlocked || !work.version || dirty} onClick={() => void action(async () => { applyNode(await curriculumService.node(enrollment.id, node.id), enrollment.id); setNotice('서버 저장본을 다시 불러왔어요.') })}>저장본 다시 열기</button>}<button className="learning-studio__primary" type="button" disabled={editingBlocked || !node.unlocked} onClick={() => void checkPractice()}>저장하고 실습 확인하기</button></div></div>
           {checkStage && <p className="learning-studio__notice" role="status">{checkStage}</p>}
-          {gaps.length > 0 && <aside className="learning-studio__notice" role="alert"><strong>실습 확인 전에 {gaps.length}개 항목을 살펴보세요</strong><ul>{gaps.map(item => <li key={item.id}><p>{item.label} · {item.message}</p><button type="button" disabled={editingBlocked} onClick={() => goToAnswer(item.id)}>항목으로 이동 · {item.label}</button></li>)}</ul><p>검사 요청 시점의 초안은 저장했어요. 추가 수정은 다시 저장해 주세요. 아직 실행·제출하지 않았으며 정답을 판정한 결과는 아닙니다.</p></aside>}
-          <p className="learning-studio__muted">Ctrl+S / ⌘S로 초안 저장 · 실습 확인 버튼은 현재 내용을 저장한 뒤 검사합니다.</p>
+          {gaps.length > 0 && <aside className="learning-studio__notice" role="alert"><strong>{gaps.length}개 항목을 채워 주세요</strong><ul>{gaps.map(item => <li key={item.id}><p>{item.label} · {item.message}</p><button type="button" disabled={editingBlocked} onClick={() => goToAnswer(item.id)}>항목으로 이동 · {item.label}</button></li>)}</ul></aside>}
+          </section>
         </form>
         {notice && <p className="learning-studio__notice" role="status">{notice}</p>}
         {work.status === 'STALE' && <p className="learning-studio__notice">답안이나 앞 수업의 확인 내용이 바뀌었어요. 이전 기록과 작성 코드는 남아 있어요. 아래에서 재확인이 필요한 이유를 확인하세요. 선수 수업이 미완료면 먼저 확인하고, 이미 완료됐다면 현재 실습을 다시 확인하세요.</p>}
-        {!!node.prerequisite_rechecks?.length && <aside className="learning-studio__notice"><strong>다시 확인할 내용</strong><ul>{node.prerequisite_rechecks.map(item => <li key={item.id}><p>{item.id} · {item.title} — {item.reason === 'CHANGED' ? '앞 수업의 내용이 바뀌었어요. 현재 코드를 검토하고 ‘저장하고 실습 확인하기’를 눌러 주세요.' : '이 수업의 현재 답안을 먼저 확인해야 해요.'}</p><button type="button" disabled={editingBlocked || !item.can_open} onClick={() => void openNode(item.id)}>{item.can_open ? item.reason === 'CHANGED' ? `${item.id} 변경된 내용 보기` : `${item.id} 확인하러 가기` : '더 앞의 선수 수업 확인 필요'}</button></li>)}</ul><p>작성한 코드를 지우거나 처음부터 다시 만들 필요는 없어요. 앞 수업 확인 후 돌아와 저장한 실습을 다시 확인하세요.</p></aside>}
-        {feedback && <section className="learning-studio__feedback" aria-live="polite"><h3>{feedback.passed ? '확인 완료' : '조금 더 살펴보기'}</h3>{Object.keys(feedback.issues).filter(id => node.fields.some(field => field.id === id) || ['concept_answer', 'reopen'].includes(id)).map(id => <button key={id} type="button" disabled={editingBlocked} onClick={() => goToAnswer(id)}>항목으로 이동 · {node.fields.find(field => field.id === id)?.label ?? (id === 'concept_answer' ? '개념 확인' : '저장본 다시 열기')}</button>)}{Object.entries(feedback.issues).map(([key, issue]) => <p key={key}><strong>{node.fields.find(field => field.id === key)?.label ?? (key === 'concept_answer' ? '개념 확인' : key === 'source' ? '본 과제 실행' : '확인할 내용')}: </strong>{issue}</p>)}<p>{feedback.scope}</p>{feedback.checks && feedback.checks.length > 0 && <ul className="learning-html-checks">{feedback.checks.map((check) => <li key={check.id}><strong>{check.passed ? '✓' : '확인 필요'} · {check.label}</strong><span>{check.message}</span></li>)}</ul>}{executionEvidence.length > 0 && <details><summary>저장본 v{work.version}의 실행 근거 보기 · 새 실행 없음</summary><p>실습 확인 때 서버에 보관한 실행 결과입니다. 다시 펼쳐도 코드 실행이나 완료 기록을 추가하지 않습니다.</p>{executionEvidence.map(item => <details key={item.field}><summary>{item.label} · 실행에서 확인한 내용</summary>{item.field === 'baseline_source' && <p>실패 재현본은 기능 오류를 관찰하는 단계예요. 아래 실패 항목과 수정본의 결과를 비교하세요. 실행 환경 장애는 기능 오류 재현과 구분합니다.</p>}<LearningExecutionDetails report={item.report} showChecks={item.field !== 'source' || !feedback.checks?.length} /></details>)}</details>}{feedback.recommendation && <><p>{feedback.recommendation.message}</p>{feedback.recommendation.foundation_ids.map((id) => <button key={id} disabled={editingBlocked} onClick={() => void openNode(id)}>{id} 설명 보기</button>)}</>}{feedback.passed && next && <button className="learning-studio__primary" disabled={editingBlocked} onClick={() => void openNode(next)}>다음 미션 · {next}</button>}{feedback.passed && !isFoundation && !next && <p>{workspace.completed_ids.length === 12 ? '12개 미션의 현재 저장본을 모두 확인했어요. 학습 기록과 코드를 내려받아 다음 프로젝트에 참고하세요.' : '현재 저장본과 선수 미션의 확인 상태를 학습 경로에서 살펴보세요.'}</p>}</section>}
-        <details className="learning-help"><summary>막혔을 때 · 단계별 힌트</summary><p>힌트를 사용해도 감점하지 않아요.</p>{hintText && <p role="status"><strong>H{hintLevel}</strong> · {hintText}</p>}<button disabled={editingBlocked || hintLevel >= 4} onClick={() => void action(async () => { const result = await curriculumService.hint(enrollment.id, node.id, hintLevel + 1); setHintLevel(result.level); setHintText(result.text) })}>{hintLevel >= 4 ? '모든 힌트를 확인했어요' : `H${hintLevel + 1} 힌트 보기`}</button><p>{node.recovery}</p>{node.foundation_ids.map((id) => <button key={id} disabled={editingBlocked} onClick={() => void openNode(id)}>{id} 기초 설명 보기</button>)}</details>
-        {['M10', 'M12'].includes(node.id) && <section className="learning-studio__section"><h3>개인 프로젝트로 이어 만들기</h3><p>처음에는 확인한 코드와 로컬 실행 구성을 개인 프로젝트에 보관합니다. 이미 만든 프로젝트는 그대로 열며 자동으로 덮어쓰거나 사본을 추가하지 않습니다.</p>
+        {!!node.prerequisite_rechecks?.length && <aside className="learning-studio__notice"><strong>다시 확인할 내용</strong><ul>{node.prerequisite_rechecks.map(item => <li key={item.id}><p>{missionTitle(item.id, item.title)} — {item.reason === 'CHANGED' ? '앞 수업의 내용이 바뀌었어요. 현재 코드를 검토하고 ‘저장하고 실습 확인하기’를 눌러 주세요.' : '이 수업의 현재 답안을 먼저 확인해야 해요.'}</p><button type="button" disabled={editingBlocked || !item.can_open} onClick={() => void openNode(item.id)}>{item.can_open ? item.reason === 'CHANGED' ? '변경된 내용 보기' : '수업 열기' : '더 앞의 선수 수업 확인 필요'}</button></li>)}</ul><p>작성한 코드를 지우거나 처음부터 다시 만들 필요는 없어요. 앞 수업 확인 후 돌아와 저장한 실습을 다시 확인하세요.</p></aside>}
+        {inReview && feedback && <section className="learning-studio__feedback" aria-live="polite"><h3>{feedback.passed ? '확인 완료' : '조금 더 살펴보기'}</h3>{Object.keys(feedback.issues).filter(id => node.fields.some(field => field.id === id) || ['concept_answer', 'reopen'].includes(id)).map(id => <button key={id} type="button" disabled={editingBlocked} onClick={() => goToAnswer(id)}>항목으로 이동 · {node.fields.find(field => field.id === id)?.label ?? (id === 'concept_answer' ? '개념 확인' : '저장본 다시 열기')}</button>)}{Object.entries(feedback.issues).map(([key, issue]) => <p key={key}><strong>{node.fields.find(field => field.id === key)?.label ?? (key === 'concept_answer' ? '개념 확인' : key === 'source' ? '본 과제 실행' : '확인할 내용')}: </strong>{issue}</p>)}<details><summary>검사 범위와 제한</summary><p>{feedback.scope}</p></details>{feedback.checks && feedback.checks.length > 0 && <details key={`${node.id}:${work.version}:${feedback.passed}`} open={!feedback.passed}><summary>{feedback.passed ? `검사 항목 · ${feedback.checks.length}개 통과` : `먼저 고칠 동작 · ${feedback.checks.filter(check => !check.passed).length}개`}</summary><ul className="learning-html-checks">{feedback.checks.filter(check => feedback.passed || !check.passed).map((check) => <li key={check.id}><strong>{check.passed ? '✓' : '확인 필요'} · {check.label}</strong><span>{check.message}</span></li>)}</ul></details>}{executionEvidence.length > 0 && <details><summary>저장본 v{work.version}의 실행 근거 보기 · 새 실행 없음</summary><p>실습 확인 때 서버에 보관한 실행 결과입니다. 다시 펼쳐도 코드 실행이나 완료 기록을 추가하지 않습니다.</p>{executionEvidence.map(item => <details key={item.field}><summary>{item.label} · 실행에서 확인한 내용</summary>{item.field === 'baseline_source' && <p>실패 재현본은 기능 오류를 관찰하는 단계예요. 아래 실패 항목과 수정본의 결과를 비교하세요. 실행 환경 장애는 기능 오류 재현과 구분합니다.</p>}<LearningExecutionDetails report={item.report} showChecks={item.field !== 'source' || !feedback.checks?.length} /></details>)}</details>}{feedback.recommendation && <><p>{feedback.recommendation.message}</p>{feedback.recommendation.foundation_ids.map((id) => <button key={id} disabled={editingBlocked} onClick={() => void openNode(id)}>{workspace.foundations.find(item => item.id === id)?.title ?? '기초 설명'}</button>)}</>}{feedback.passed && next && <button className="learning-studio__primary" disabled={editingBlocked} onClick={() => void openNode(next)}>다음 수업 →</button>}{feedback.passed && !isFoundation && !next && <p>{workspace.completed_ids.length === 12 ? '12개 미션의 현재 저장본을 모두 확인했어요. 학습 기록과 코드를 내려받아 다음 프로젝트에 참고하세요.' : '현재 저장본과 선수 미션의 확인 상태를 학습 경로에서 살펴보세요.'}</p>}</section>}
+        {inReview && ['M10', 'M12'].includes(node.id) && <section className="learning-studio__section"><h3>개인 프로젝트로 이어 만들기</h3><p>완성한 코드를 내 프로젝트에서 이어서 작업할 수 있어요.</p>
           {handoffBusy && <p role="status">프로젝트 연결 상태를 확인하고 있어요…</p>}
           {handoffError && <p role="alert">{handoffError}<button disabled={editingBlocked || handoffBusy} onClick={() => setBridgeReload(value => value + 1)}>프로젝트 상태 다시 확인</button></p>}
           {(node.project_handoffs ?? []).map(item => <div key={item.field}><p><strong>{item.field === 'source' ? '본 과제' : '다른 문제에 적용한 과제'}</strong> · {item.reason}</p>
@@ -472,11 +524,13 @@ export default function LearningStudio({ userId, onLegacy, beforeLeaveRef, onOpe
             <button type="button" disabled={editingBlocked || bridgeActive || handoffBusy || Boolean(handoffError) || !work.version || (!item.can_open && (!item.can_create || dirty || work.status !== 'PASSED'))} onClick={() => void openHandoff(item.field)}>{item.can_open ? `프로젝트 열기 · ${item.project_name}` : item.field === 'source' ? '본 과제 프로젝트 만들기' : '다른 문제에 적용한 프로젝트 만들기'}</button>
           </div>)}
         </section>}
-        {['M10', 'M12'].includes(node.id) && node.project_handoffs?.some(item => item.can_open) && <LearningProjectUpdate key={`${enrollment.id}/${node.id}`} enrollmentId={enrollment.id} nodeId={node.id} version={work.version} projectFields={(node.project_handoffs ?? []).filter(item => item.can_open).map(item => ({ id: item.field, label: item.project_name ?? item.field }))} disabled={editingBlocked || dirty || bridgeActive || handoffBusy || Boolean(handoffError) || work.status !== 'PASSED'} onApplied={() => { setBridgeReload(value => value + 1); setNotice('') }} />}
+        {inReview && ['M10', 'M12'].includes(node.id) && node.project_handoffs?.some(item => item.can_open) && <LearningProjectUpdate key={`${enrollment.id}/${node.id}`} enrollmentId={enrollment.id} nodeId={node.id} version={work.version} projectFields={(node.project_handoffs ?? []).filter(item => item.can_open).map(item => ({ id: item.field, label: item.project_name ?? item.field }))} disabled={editingBlocked || dirty || bridgeActive || handoffBusy || Boolean(handoffError) || work.status !== 'PASSED'} onApplied={() => { setBridgeReload(value => value + 1); setNotice('') }} />}
         {historyError && <section className="learning-studio__notice"><p>저장한 실행 기록을 읽지 못했어요. 현재 작성 내용은 유지됩니다. {historyError}</p><button disabled={editingBlocked} onClick={() => setHistoryRetry(value => value + 1)}>실행 기록 다시 읽기</button></section>}
+        <details className="journal-workspace__more"><summary>학습 도구 및 내보내기</summary>
         <LearningProjectBridge key={`${enrollment.id}/${node.id}/${bridgeReload}`} enrollmentId={enrollment.id} disabled={editingBlocked} onActive={setBridgeActive} renderFoundation={id => <FoundationPractice id={id} />} onOpen={async (id, jump) => { await action(async () => { if (dirty) await persist(); await onOpenProject(id, jump) }) }} />
         <ManualAI key={node.id} node={node} answers={answers} feedback={feedback} />
-        <footer className="learning-studio__footer"><button onClick={exportDraft}>현재 작성 내용 내려받기</button><p>저장한 답안과 전체 과정 다운로드는 위의 학습 기록에서 확인할 수 있어요.</p></footer>
+        <button type="button" onClick={exportDraft}>현재 작성 내용 내려받기</button>
+        </details>
       </article>
     </div>
   </main>

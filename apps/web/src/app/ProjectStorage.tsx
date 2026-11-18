@@ -1,13 +1,14 @@
+import GitHubImportAccess from './GitHubImportAccess'
 import { ReactNode } from 'react'
 import { ProjectGitHubSource } from '../services/projects'
 
-export default function ProjectStorage({ directory, pendingDirectory, github, busy, readOnly, dirty, needsReload, accessLost, localApp, versions, onChoose, onImport, onExport, onRefresh, onSync, onDisconnect, onCancel, onCheckGitHub, onPullGitHub, onConnections, onArchive, onBackup, onImportBackup }: {
+export default function ProjectStorage({ directory, pendingDirectory, github, busy, readOnly, dirty, needsReload, accessLost, localApp, versions, onChoose, onImport, onExport, onRefresh, onSync, onDisconnect, onCancel, onCheckGitHub, onPullGitHub, onArchive, onBackup, onImportBackup }: {
   directory: string | null; pendingDirectory: string | null; github: ProjectGitHubSource | null
   busy: boolean; readOnly: boolean; dirty: boolean; needsReload: boolean; accessLost: boolean; versions: ReactNode
   localApp: boolean
   onChoose: () => void; onImport: () => void; onExport: () => void; onRefresh: () => void; onSync: () => void
   onDisconnect: () => void; onCancel: () => void; onCheckGitHub: () => void; onPullGitHub: () => void
-  onConnections: () => void; onArchive: () => void; onBackup: () => void; onImportBackup: (file: File) => void
+  onArchive: () => void; onBackup: () => void; onImportBackup: (file: File) => void
 }) {
   return <div className="project-storage-layout">
     <header className="storage-intro"><p className="eyebrow">프로젝트 보관</p><h2>저장 위치와 내보내기</h2><p>초안과 팀 작업은 이 우리들의 개발일지에 저장됩니다. 컴퓨터 폴더와 ZIP으로 코드 사본을 보관할 수 있어요.</p><span className="storage-state">기본 저장 · 우리들의 개발일지{directory ? ` / 폴더 사본 · ${directory}` : ''}</span></header>
@@ -19,8 +20,9 @@ export default function ProjectStorage({ directory, pendingDirectory, github, bu
     </section>
     {github?.connected && <section className="storage-section" aria-labelledby="storage-github-title">
       <div className="storage-section-heading"><div><h3 id="storage-github-title">가져온 GitHub 원본</h3><p><a href={github.repository_url ?? '#'} target="_blank" rel="noreferrer">{github.repository_url?.replace('https://github.com/', '')}</a> · {github.branch} · {github.is_private ? '비공개' : '공개'}</p><small>가져온 커밋 {github.imported_sha?.slice(0, 7)}</small></div><button className="secondary-button" type="button" onClick={onCheckGitHub} disabled={busy}>GitHub 변경 확인</button></div>
-      <p role="status">{github.status_message ?? (github.latest_sha === null ? '연결 앱에서 GitHub 권한을 확인하세요.' : github.update_available ? '가져올 새 변경이 있어요.' : '가져온 원본이 최신 상태예요.')}</p>
+      <p role="status">{github.status_message ?? (github.latest_sha === null ? 'GitHub 저장소 읽기 권한을 확인하세요.' : github.update_available ? '가져올 새 변경이 있어요.' : '가져온 원본이 최신 상태예요.')}</p>
       {github.update_available && <button className="primary-button" type="button" onClick={onPullGitHub} disabled={busy || dirty || needsReload || readOnly}>{readOnly ? '보기 전용' : dirty ? '먼저 초안 저장' : needsReload ? '최신 초안 먼저 확인' : 'GitHub 변경 가져오기'}</button>}
+      {github.is_private && !readOnly && <GitHubImportAccess disabled={busy} />}
       <p className="storage-footnote">가져오기 전 초안을 버전으로 보관합니다. 연결한 컴퓨터 폴더에는 자동 반영하지 않습니다.</p>
     </section>}
     <section className="storage-section" aria-labelledby="storage-export-title">
@@ -30,6 +32,5 @@ export default function ProjectStorage({ directory, pendingDirectory, github, bu
       <details className="storage-help"><summary>저장 실패 시 수정본 보관·복구하기</summary><p>수정본 JSON에는 코드와 비교 기준이 담깁니다. 같은 우리들의 개발일지의 같은 프로젝트에서 가져오면 서버 내용과 비교해 복구합니다. 저장이 실패한 상태에서도 내려받을 수 있어요.</p><div className="storage-action-row"><button className="secondary-button" type="button" onClick={onBackup}>현재 수정본 JSON 내려받기</button><label className="storage-import-label">수정본 JSON 가져오기<input type="file" accept=".json,application/json" disabled={busy || readOnly} onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) onImportBackup(file) }} /></label></div></details>
     </section>
     {versions}
-    <footer className="storage-connection-link"><p>Google Drive 파일 선택과 GitHub 토큰은 계정의 연결 앱에서 관리합니다.</p><button className="plain-link-button" type="button" onClick={onConnections} disabled={busy}>연결 앱에서 계정 관리 →</button></footer>
   </div>
 }

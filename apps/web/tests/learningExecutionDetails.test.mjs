@@ -27,3 +27,28 @@ test('main feedback can omit repeated checks without losing failed execution det
   assert.match(html, /구문 오류/)
   assert.doesNotMatch(html, /중복 검사 이름/)
 })
+
+
+test('unavailable execution is not presented as learner failure', () => {
+  const html = render({ status: 'UNAVAILABLE' })
+  assert.match(html, /코드가 틀렸다고 판단하지 않아요/)
+  assert.doesNotMatch(html, /모두 통과했어요|확인 필요 ·/)
+})
+
+test('case summaries show observed calls and errors rather than invented per-case grades', () => {
+  const html = render({ status: 'COMPLETED', cases: [
+    { title: '   ', input: '   ', prevented: true, calls: [], error: '제목을 입력하세요.' },
+    { title: '새 글', input: '새 글', prevented: true, calls: [{ title: '새 글', content: '' }], error: '' },
+  ], checks: [{ id: 'validation', label: '빈 값 거절', passed: false, message: '저장 전에 확인하세요.' }] })
+  assert.match(html, /저장 요청 0회/)
+  assert.match(html, /저장 요청 1회/)
+  assert.match(html, /1개 중 1개 동작을 더 확인/)
+  assert.match(html, /저장 전에 확인하세요/)
+  assert.match(html, /전체 검사 항목/)
+})
+
+test('successful execution reports distinguish runtime checks from mission submission', () => {
+  const html = render({ status: 'COMPLETED', checks: [{ id: 'a', label: '저장', passed: true, message: '확인' }] })
+  assert.match(html, /실행 검사 1개를 모두 통과/)
+  assert.match(html, /수업 완료는 개념 답과 필수 과제를 제출한 뒤/)
+})

@@ -2,11 +2,32 @@
 
 from copy import deepcopy
 
+from app.content.curriculum import guided_starters
+
 VERSION = "practice-v2"
 LEVEL_TITLES = {"BEGINNER": "입문 · 안내 따라 구현", "PRACTICED": "기본 · 연결 완성", "EXPERIENCED": "경험자 · 직접 설계"}
 TRANSFER_MISSIONS = {"M05", "M07", "M10", "M12"}
 TRANSFER_TRY = "전이 과제도 도전하기"
 TRANSFER_LATER = "본 과제부터 마치기"
+
+OBSERVATION_QUESTIONS = {
+    ("M11", "reproduction"): (
+        "등록은 성공했지만 목록 갱신에 실패한 실행에서 무엇이 보였나요?",
+        (
+            "API가 글을 저장했지만 화면 목록에는 새 글이 없었어요.",
+            "서버가 입력을 거절해서 DB에도 새 글이 없었어요.",
+            "화면 목록은 바뀌었지만 등록 요청은 서버에 도착하지 않았어요.",
+        ),
+    ),
+    ("M12", "architecture_explanation"): (
+        "앱을 다시 열어도 메모와 할 일이 보이는 이유는 무엇인가요?",
+        (
+            "화면이 API에 목록을 요청하고, API가 DB에 저장된 항목을 읽어 반환해요.",
+            "React 입력 상태가 서버를 다시 시작한 뒤에도 목록을 복원해요.",
+            "이전 POST 응답만 보관하면 DB에 기록하지 않아도 다시 조회할 수 있어요.",
+        ),
+    ),
+}
 
 
 def presentation(node: dict, assignment: dict | None) -> dict:
@@ -29,14 +50,35 @@ def presentation(node: dict, assignment: dict | None) -> dict:
         })
         result["recovery"] = "입력과 결과 표시, 요청 검사, 저장과 조회 중 어느 역할인지 비교하고 해당 보기를 다시 선택하세요."
     elif node["id"] == "M11":
-        result["student_task"] = "M10에서 이어진 실패 재현본에서 등록 후 GET이나 목록 갱신을 빼는 등 기능 오류를 재현하세요. 입력·절차·실제 오류를 짧게 적고, 별도 수정본을 고쳐 실행하세요. 원인 가설과 추가 관찰 메모는 선택입니다. 실행기 장애나 시간 초과는 기능 오류 재현으로 인정하지 않습니다."
+        result["student_task"] = "실패 재현본에서 등록 후 목록 갱신을 빼고 실행하세요. 결과에서 관찰한 상황을 고른 뒤 수정본을 실행해 비교하세요."
     elif node["id"] == "M12":
         result["student_task"] = node["student_task"].replace(
             "요구사항 두 개와 UI/API/DB 책임을 설명한 뒤 할 일 목록 전이도 구현하세요.",
-            "할 일 목록도 별도 과제로 구현하고 두 앱을 실행하세요. UI·API·DB가 맡은 역할과 실제 실행에서 확인한 사례를 짧게 설명하세요. 요구사항 메모는 선택입니다.",
+            "할 일 목록도 별도 과제로 구현하고 두 앱을 실행하세요. 실습 확인에서 목록이 복원되는 이유를 고르세요. 요구사항 메모는 선택입니다.",
         )
         result["hints"].update({"H1": "메모장과 할 일 앱에서 입력 필드·API 경로·DB 테이블이 어떻게 달라지는지 비교하세요.",
-                                "H4": "두 앱의 GET·POST 201·DB 저장·목록 표시·빈 값과 길이 초과·재시작 복원을 확인하세요. UI·API·DB 역할과 실행 사례 설명은 필수이며, 요구사항 메모는 선택입니다."})
+                                "H4": "두 앱의 GET·POST 201·DB 저장·목록 표시와 재시작 복원을 확인하세요. 실습 확인에서 목록이 복원되는 이유를 고르세요. 요구사항 메모는 선택입니다."})
+    if assignment.get("level") == "BEGINNER" and node["id"] in {"M10", "M12"}:
+        table, column = ("posts", "title") if node["id"] == "M10" else ("notes", "text")
+        columns = f"{column}, content" if node["id"] == "M10" else column
+        parameters = "?, ?" if node["id"] == "M10" else "?"
+        values = f"payload.{column}, payload.content" if node["id"] == "M10" else f"payload.{column},"
+        returned = f'"{column}": payload.{column}' + (', "content": payload.content' if node["id"] == "M10" else '')
+        body = f'{{{column}: cleaned' + (', content: ""' if node["id"] == "M10" else '') + '}'
+        result["hints"]["H2"] = (
+            "cleaned는 입력을 trim()한 값이에요. 빈 값과 길이를 먼저 검사한 뒤 아래 POST를 연결하고 목록을 다시 읽으세요.\n"
+            f'const response = await fetch("/api/{table}", {{\n'
+            '  method: "POST", headers: {"Content-Type": "application/json"},\n'
+            f'  body: JSON.stringify({body})\n'
+            '});\nif (!response.ok) throw new Error("저장 실패");'
+        )
+        result["hints"]["H3"] = (
+            "with sqlite3.connect(DB_PATH) as connection: 안에서 실행할 예시예요. 입력은 ?에 전달해요.\n"
+            f'cursor = connection.execute("INSERT INTO {table}({columns}) VALUES ({parameters})", ({values}))\n'
+            'connection.commit()\n'
+            f'return {{"id": cursor.lastrowid, {returned}}}\n'
+            + ("M09에서 이어진 API가 있다면 저장 코드를 먼저 확인하세요." if node["id"] == "M10" else "할 일 앱에서는 notes/text를 tasks/label로 바꾸고 같은 흐름을 연결하세요.")
+        )
     return result
 
 
@@ -44,8 +86,11 @@ def new_assignment(node_id: str, level: str, path_version: int) -> dict | None:
     if node_id not in {f"M{number:02d}" for number in range(1, 13)}:
         return None
     required = node_id == "M12" or level == "EXPERIENCED" or (level == "PRACTICED" and node_id == "M10")
-    return {"version": VERSION, "level": level, "key": f"{VERSION}:{level}:{path_version}",
-            "transfer_required": node_id in TRANSFER_MISSIONS and required}
+    result = {"version": VERSION, "level": level, "key": f"{VERSION}:{level}:{path_version}",
+              "transfer_required": node_id in TRANSFER_MISSIONS and required}
+    if level == "BEGINNER" and node_id in {"M10", "M12"}:
+        result.update(starter_revision=guided_starters.REVISION, key=f"{result['key']}:{guided_starters.REVISION}")
+    return result
 
 
 def describe(assignment: dict | None, node_id: str, *, pinned: bool) -> dict:
@@ -75,20 +120,27 @@ def transfer_enabled(assignment: dict | None, answers: dict, node_id: str) -> bo
     return not assignment or assignment["transfer_required"] or answers.get("transfer_mode") == TRANSFER_TRY
 
 
-def fields_for_assignment(fields: list[dict], assignment: dict | None, node_id: str) -> list[dict]:
+def fields_for_assignment(fields: list[dict], assignment: dict | None, node_id: str, saved_answers: dict[str, str] | None = None) -> list[dict]:
     fields = deepcopy(fields)
     if assignment and assignment["version"] == VERSION:
         for field in fields:
-            if field["kind"] == "text" and (node_id, field["id"]) not in {("M11", "reproduction"), ("M12", "architecture_explanation")}:
+            question = OBSERVATION_QUESTIONS.get((node_id, field["id"]))
+            if question:
+                label, choices = question
+                previous = (saved_answers or {}).get(field["id"], "").strip()
+                field.update(label=label, kind="choice", choices=list(choices), correct_choice=choices[0])
+                if previous and previous not in choices:
+                    field["previous_response"] = True
+            elif field["kind"] == "text":
                 field.update(optional=True, practice_note=True)
-            if (node_id, field["id"]) == ("M11", "reproduction"):
-                field["placeholder"] = "어떤 값을 입력하고 어떤 버튼을 눌렀나요? 기대한 결과와 실제 결과의 차이를 짧게 적어 주세요."
-            elif (node_id, field["id"]) == ("M12", "architecture_explanation"):
-                field["placeholder"] = "화면은 무엇을 보내고, API는 무엇을 확인하며, DB는 무엇을 저장했나요? 실행 결과에서 확인한 사례 하나를 덧붙여 주세요."
         if node_id == "M01":
             fields.insert(0, {"id": "project_goal", "label": "먼저 만들어 볼 게시판", "kind": "choice", "choices": [
                 "학급 소식을 공유하는 게시판", "공부한 내용을 기록하는 게시판", "팀의 진행 상황을 나누는 게시판",
             ]})
+    elif node_id.startswith("C"):
+        for field in fields:
+            if field["kind"] == "text":
+                field.update(optional=True, practice_note=True)
     if assignment and node_id in TRANSFER_MISSIONS and not assignment["transfer_required"]:
         index = next(i for i, field in enumerate(fields) if field["id"].startswith("transfer_"))
         fields.insert(index, {"id": "transfer_mode", "label": "다른 문제에도 적용해 볼까요?", "kind": "choice",
@@ -114,11 +166,11 @@ GUIDED_STEPS = {
     "M09": ["테이블을 지우지 않고 여는 초기화를 먼저 읽으세요.", "GET의 행 변환과 POST의 매개변수 INSERT를 완성하세요.", "서버 재시작 뒤에도 같은 행이 조회되는지 확인하세요."],
     "M10": ["M09에 저장한 API가 있다면 그대로 이어 사용해요.", "준비된 GET 함수와 POST 제출 처리 사이를 연결하세요.", "저장·재조회·실패 시 입력 보존을 차례로 확인하세요."],
     "M11": ["M10 코드에서 실패하는 입력을 골라 재현본에 남기세요.", "예상한 원인 부분을 찾아 수정본만 바꾸세요. 가설 메모는 선택입니다.", "실패 재현본과 수정본의 실행 항목을 비교하세요."],
-    "M12": ["메모와 할 일의 API 경로·입력 필드를 비교하세요.", "요구사항을 정하고 화면·API·DB를 각각 구현하세요.", "두 앱의 저장·복원 결과를 확인하고 역할을 설명하세요."],
+    "M12": ["메모와 할 일의 API 경로·입력 필드를 비교하세요.", "요구사항을 정하고 화면·API·DB를 각각 구현하세요.", "두 앱의 저장·복원 결과를 확인하고 올바른 설명을 고르세요."],
 }
 
 
-def starters(node_id: str, level: str, source: str | None, transfer: str | None, files: dict) -> tuple:
+def starters(node_id: str, level: str, source: str | None, transfer: str | None, files: dict, *, starter_revision: str | None = None) -> tuple:
     """Change supplied code, never a learner's saved answers or predecessor code."""
     files = dict(files)
     if level == "PRACTICED" or node_id in {"M01", "M02", "M11"} or node_id.startswith("C"):
@@ -180,6 +232,12 @@ with sqlite3.connect("/data/learning.db") as connection:
         source = source.replace('// GET /api/posts → response.json() → setPosts로 연결하세요.\n    // response.ok가 false이면 Error를 throw하세요.', '''const response = await fetch("/api/posts");
     if (!response.ok) throw new Error("목록 조회 실패");
     setPosts(await response.json());''')
+    if starter_revision == guided_starters.REVISION and node_id in {"M10", "M12"}:
+        source = guided_starters.react("posts", "title", 80, content=True) if node_id == "M10" else guided_starters.react("notes", "text", 200)
+        if node_id == "M12":
+            files["api_source"] = guided_starters.api("notes", "text", 200)
+        transfer = guided_starters.react("items", "name", 40, content=True) if node_id == "M10" else guided_starters.react("tasks", "label", 120)
+        files["transfer_api_source"] = guided_starters.api("items", "name", 40, content=True) if node_id == "M10" else guided_starters.api("tasks", "label", 120)
     return source, transfer, files
 
 

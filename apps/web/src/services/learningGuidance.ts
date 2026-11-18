@@ -28,6 +28,7 @@ export function submissionGaps(node: LearningNode, answers: Record<string, strin
   for (const field of node.fields) {
     if (field.practice_note || (field.optional && !(node.assignment.has_transfer && transfer && field.id.startsWith('transfer_')))) continue
     const value = (answers[field.id] ?? '').trim()
+    if (field.previous_response && value === (work.answers[field.id] ?? '').trim() && Array.from(value).length >= (field.min_length ?? 1)) continue
     if (field.kind === 'choice' ? !field.choices?.includes(value) : Array.from(value).length < (field.min_length ?? 1)) {
       gaps.push({ id: field.id, label: field.label, message: field.kind === 'choice' ? '보기에서 하나를 선택해 주세요.' : `${field.min_length ?? 1}자 이상 ${field.kind === 'code' ? '코드를 작성해 주세요.' : '구체적으로 적어 주세요.'}` })
     }
@@ -52,7 +53,7 @@ export function continuationId(workspace: LearningWorkspace, currentId: string, 
 export function aiHelpContext(node: LearningNode, answers: Record<string, string>, includeAnswers: boolean, feedback: WorkFeedback | null): string {
   const guide = node.practice_guide
   const raw = [
-    `나는 WebLink에서 ${node.id} · ${node.title} 수업을 진행하고 있어요.`,
+    `나는 우리들의 개발일지에서 ${node.id} · ${node.title} 수업을 진행하고 있어요.`,
     `목표: ${node.objective}`,
     `과제: ${node.task}`,
     `현재 과제 기준: ${node.assignment.title}`,

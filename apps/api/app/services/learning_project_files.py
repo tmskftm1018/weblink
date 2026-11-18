@@ -20,7 +20,7 @@ def project_files(frontend: str, api: str, origin: dict) -> list[ProjectFileInpu
         "api/Dockerfile": 'FROM python:3.12-slim\nENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1\nWORKDIR /app\nCOPY requirements.txt ./\nRUN pip install --no-cache-dir -r requirements.txt && useradd --uid 10001 --no-create-home learner && mkdir -p /data && chown 10001:10001 /data\nCOPY main.py ./\nUSER 10001:10001\nCMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]\n',
         "compose.yaml": 'services:\n  api:\n    build: ./api\n    ports: ["127.0.0.1:8081:8000"]\n    volumes: ["app-data:/data"]\n  web:\n    build: ./web\n    ports: ["127.0.0.1:5174:5173"]\n    depends_on: [api]\nvolumes:\n  app-data:\n',
         ".gitignore": "node_modules/\ndist/\n__pycache__/\n*.db\n*.sqlite*\n.env\n",
-        "README.md": f'''# 나의 WebLink 학습 프로젝트
+        "README.md": f'''# 나의 우리들의 개발일지 학습 프로젝트
 
 {origin['node_id']}의 저장본 v{origin['work_version']}에서 가져온 React와 FastAPI 코드입니다.
 
@@ -39,7 +39,7 @@ docker compose up --build -d
 
 ## 이어서 개발
 
-WebLink의 기존 프로젝트 편집·팀원·버전·ZIP 내려받기를 사용하세요. WebLink의 Python 실행 버튼은 이 React+FastAPI 구성을 실행하는 기능이 아닙니다. 전체 앱 실행은 위 Docker Compose를 사용합니다. 로컬 코드를 바꿨다면 다시 빌드하세요.
+우리들의 개발일지의 기존 프로젝트 편집·팀원·버전·ZIP 내려받기를 사용하세요. 우리들의 개발일지의 Python 실행 버튼은 이 React+FastAPI 구성을 실행하는 기능이 아닙니다. 전체 앱 실행은 위 Docker Compose를 사용합니다. 로컬 코드를 바꿨다면 다시 빌드하세요.
 
 학습 원본 React 코드는 `.weblink/original-App.jsx`, 출처는 `.weblink/learning-origin.json`에 보관합니다. 웹용 App.jsx에는 React import와 export만 추가했습니다. API 소스는 그대로 복사했습니다. 학습 실행 판정은 원본 답안의 기록이며 이 프로젝트를 다시 실행해 검증했다는 뜻은 아닙니다. 제공한 로컬 실행 구성의 실제 기동 검증은 아직 남아 있습니다.
 ''',

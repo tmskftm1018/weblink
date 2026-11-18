@@ -15,7 +15,7 @@ from app.api.v1.tasks import router as tasks_router
 from app.api.v1.versions import router as versions_router
 from app.core.config import settings
 
-app = FastAPI(title="WebLink API", version="0.1.0")
+app = FastAPI(title="우리들의 개발일지 API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.web_origins,

@@ -53,7 +53,7 @@ function ProjectFileTree({ tree, changedPaths, selectedPath, busy, onOpen, onRen
         event.dataTransfer.setData('application/x-weblink-project-file', file.path)
         event.dataTransfer.effectAllowed = 'move'
       }} onClick={() => onOpen(file.path)} title={`${file.path} · 폴더나 프로젝트 루트로 끌어 이동`}>
-        <span aria-hidden="true">{file.path.endsWith('.py') ? '🐍' : '▤'}</span><span className="file-row-path">{file.path.split('/').pop()}</span>{changedPaths?.has(file.path) && <i className="file-change-dot" aria-label="저장 전 변경 있음" />}
+        <span aria-hidden="true">▤</span><span className="file-row-path">{file.path.split('/').pop()}</span>{changedPaths?.has(file.path) && <i className="file-change-dot" aria-label="저장 전 변경 있음" />}
       </button>
       <div className="file-entry-actions">
         <button type="button" onClick={() => onRename(file.path)} disabled={busy} aria-label={`${file.path} 이름 바꾸기`} title="이름 바꾸기">✎</button>

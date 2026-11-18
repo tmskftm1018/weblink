@@ -178,7 +178,7 @@ export async function removeProjectFileFromDirectory(directory: ProjectDirectory
   validatePath(path)
   const segments = path.split('/')
   if (segments.some((segment) => segment.toLowerCase() === '.git')) {
-    throw new Error('Git 저장소 내부 파일은 WebLink에서 삭제할 수 없습니다.')
+    throw new Error('Git 저장소 내부 파일은 우리들의 개발일지에서 삭제할 수 없습니다.')
   }
   let current = directory
   for (const segment of segments.slice(0, -1)) {
@@ -202,7 +202,7 @@ export async function removeProjectFileFromDirectory(directory: ProjectDirectory
 export async function removeEmptyProjectDirectoryFromDirectory(directory: ProjectDirectory, path: string): Promise<void> {
   validatePath(path)
   if (path.split('/').some((segment) => segment.toLowerCase() === '.git')) {
-    throw new Error('Git 저장소 내부 폴더는 WebLink에서 삭제할 수 없습니다.')
+    throw new Error('Git 저장소 내부 폴더는 우리들의 개발일지에서 삭제할 수 없습니다.')
   }
   await ensurePermission(directory)
   const chain: Array<{ parent: FileSystemDirectoryHandle; name: string }> = []
@@ -236,10 +236,10 @@ export async function moveProjectFileInDirectory(
   validatePath(oldPath)
   validatePath(newPath)
   if (isSensitive(oldPath) || isSensitive(newPath)) {
-    throw new Error('비밀 파일 경로는 WebLink에서 이름을 바꿀 수 없습니다.')
+    throw new Error('비밀 파일 경로는 우리들의 개발일지에서 이름을 바꿀 수 없습니다.')
   }
   if ([oldPath, newPath].some((path) => path.split('/').some((segment) => segment.toLowerCase() === '.git'))) {
-    throw new Error('Git 저장소 내부 파일은 WebLink에서 이름을 바꿀 수 없습니다.')
+    throw new Error('Git 저장소 내부 파일은 우리들의 개발일지에서 이름을 바꿀 수 없습니다.')
   }
   await ensurePermission(directory)
   const destinationParts = newPath.split('/')
@@ -282,9 +282,9 @@ export async function moveProjectFilesInDirectory(
   for (const move of moves) {
     validatePath(move.oldPath)
     validatePath(move.newPath)
-    if (isSensitive(move.oldPath) || isSensitive(move.newPath)) throw new Error('비밀 파일 경로는 WebLink에서 이름을 바꿀 수 없습니다.')
+    if (isSensitive(move.oldPath) || isSensitive(move.newPath)) throw new Error('비밀 파일 경로는 우리들의 개발일지에서 이름을 바꿀 수 없습니다.')
     if ([move.oldPath, move.newPath].some((path) => path.split('/').some((segment) => segment.toLowerCase() === '.git'))) {
-      throw new Error('Git 저장소 내부 파일은 WebLink에서 이름을 바꿀 수 없습니다.')
+      throw new Error('Git 저장소 내부 파일은 우리들의 개발일지에서 이름을 바꿀 수 없습니다.')
     }
     const normalizedTarget = move.newPath.toLocaleLowerCase()
     if (targetPaths.has(normalizedTarget)) throw new Error(`이동 후 파일 경로가 겹칩니다: ${move.newPath}`)

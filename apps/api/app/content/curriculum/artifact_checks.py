@@ -109,8 +109,11 @@ def evaluate(node: dict, answers: dict[str, str], *, reopened: bool, fields: lis
     for field in fields if fields is not None else fields_for(node):
         value = answers.get(field["id"], "").strip()
         if field["kind"] == "choice":
-            if value not in field["choices"]:
+            previous = field.get("previous_response") and len(value) >= field.get("min_length", 1)
+            if value not in field["choices"] and not previous:
                 issues[field["id"]] = "보기에서 하나를 선택해 주세요."
+            elif value in field["choices"] and field.get("correct_choice") and value != field["correct_choice"]:
+                issues[field["id"]] = "실행 결과와 저장 흐름을 확인한 뒤 다시 골라 보세요."
         elif len(value) < field.get("min_length", 1):
             issues[field["id"]] = f"{field.get('min_length', 1)}자 이상으로 구체적으로 적어 주세요."
     if answers.get("concept_answer") != node["concept_check"]["answer"]:

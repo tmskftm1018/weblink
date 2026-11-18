@@ -1,0 +1,526 @@
+:root {
+  --site-header-gutter: clamp(20px, 5vw, 72px);
+  --site-header-height: 70px;
+  --journal-content-gutter: clamp(16px, 3vw, 42px);
+  --journal-page-top: clamp(24px, 3.5vw, 44px);
+  --journal-control-height: 42px;
+  --journal-compact-height: 36px;
+  color-scheme: light;
+  --journal-paper: #faf6f4;
+  --journal-sheet: #fffcfa;
+  --journal-ink: #2b2025;
+  --journal-muted: #655961;
+  --journal-line: #e4d9da;
+  --journal-wine: #761433;
+  --journal-deep: #551029;
+  --journal-blush: #f4e2e6;
+  --journal-code: #211e22;
+  --journal-shadow: 0 2px 9px #5d20340a;
+  accent-color: var(--journal-wine);
+}
+
+body, .learning-shell, .welcome, .welcome.auth-page {
+  background: var(--journal-paper);
+  color: var(--journal-ink);
+}
+
+.welcome > .status { color: var(--journal-muted); }
+
+.landing-minimal {
+  --landing-ink: var(--journal-ink);
+  --landing-muted: var(--journal-muted);
+  --landing-line: var(--journal-line);
+  background: var(--journal-paper);
+  color: var(--journal-ink);
+}
+
+.landing-minimal .landing-header,
+.learning-shell .learning-topbar,
+.auth-brand-bar {
+  height: var(--site-header-height);
+  padding-inline: var(--site-header-gutter);
+  background: var(--journal-sheet);
+  color: var(--journal-ink);
+  border: 0;
+  box-shadow: inset 0 -1px var(--journal-line), var(--journal-shadow);
+}
+.landing-minimal .landing-brand,
+.landing-minimal .landing-login { color: var(--journal-wine); }
+.landing-minimal .landing-login { border-color: var(--journal-line); background: var(--journal-sheet); }
+.landing-minimal .landing-login span { color: inherit; }
+.landing-minimal .landing-login:hover { background: var(--journal-blush); }
+.landing-minimal .onepage-intro h1 { color: var(--journal-deep); }
+.landing-minimal .onepage-intro :is(.onepage-tagline, .onepage-lead) { color: var(--journal-muted); }
+.landing-minimal .onepage-primary { background: var(--journal-wine); color: #fff; }
+.landing-minimal .onepage-primary span { color: var(--journal-blush); }
+.landing-minimal .onepage-primary:hover { background: var(--journal-deep); }
+@media (max-width: 380px) {
+  .landing-minimal .onepage-intro h1 { font-size: clamp(29px, 9.4vw, 34px); }
+}
+
+.learning-shell .learning-topbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.learning-shell .learning-topbar :is(.topbar-brand, .topbar-brand *, .account-menu, .account-menu button),
+.learning-shell .learning-topbar .topbar-nav button:not(.active) { color: var(--journal-ink) !important; }
+.learning-shell .learning-topbar .topbar-brand * { color: var(--journal-wine) !important; }
+.learning-shell .learning-topbar .topbar-nav button.active {
+  color: white !important;
+  background: var(--journal-wine);
+}
+.learning-shell .learning-topbar .topbar-brand,
+.auth-brand-bar .auth-home-link {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -.04em;
+  white-space: nowrap;
+}
+.learning-shell .learning-topbar .topbar-brand > span { display: inline; }
+.learning-shell .learning-topbar .topbar-brand { justify-self: start; }
+.learning-shell .learning-topbar .topbar-nav { justify-self: center; }
+.learning-shell .learning-topbar .account-menu { min-width: 0; justify-self: end; }
+.learning-shell .learning-topbar .account-menu > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.auth-brand-bar {
+  position: absolute;
+  inset: 0 0 auto;
+  display: flex;
+  align-items: center;
+}
+.auth-page .auth-brand-bar .auth-home-link {
+  padding: 0;
+  margin: 0;
+  color: var(--journal-wine);
+}
+.welcome.auth-page { padding-top: calc(var(--site-header-height) + 24px); }
+.learning-shell .learning-topbar .account-menu button {
+  border-color: var(--journal-line);
+  background: var(--journal-sheet);
+}
+.learning-shell .learning-topbar .account-menu button:hover { background: var(--journal-blush); }
+
+.landing-minimal .landing-login,
+.learning-shell .learning-topbar :is(.topbar-nav button, .account-menu button) {
+  min-height: var(--journal-compact-height);
+  padding: 6px 11px;
+  border-radius: 8px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.landing-minimal .onepage-primary { min-height: 46px; border-radius: 8px; }
+.learning-shell :is(.primary-button, .secondary-button),
+.auth-page .primary-button,
+.learning-shell .journal-studio :is(.learning-studio__primary, .journal-phase-actions button, .learning-result-close, .journal-result-placeholder button),
+.learning-shell :is(.project-list-controls input, .project-list-controls select, .project-run-history__controls select) {
+  min-height: var(--journal-control-height);
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.learning-shell .project-create-form { gap: 12px; }
+.learning-shell .project-form-heading { align-items: center; gap: 12px; }
+.learning-shell .project-form-heading h2 { margin: 0; line-height: 1.35; }
+.learning-shell .import-project-note,
+.learning-shell .task-limit-note,
+.welcome.auth-page :is(.form-hint, .form-error) { margin-top: 0; }
+.learning-shell :is(.panel-close-button, .file-add-button, .editor-tab-close) {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  display: grid;
+  place-items: center;
+}
+.learning-shell .file-add-button,
+.learning-shell .file-panel-heading .panel-label { margin: 0; }
+.learning-shell .file-panel-heading { padding: 0 4px 8px; }
+.learning-shell .file-panel { border-color: var(--journal-line); background: var(--journal-paper); }
+.learning-shell .project-search-launch {
+  border-color: var(--journal-line);
+  padding: 0 4px 8px;
+  margin-bottom: 8px;
+}
+.learning-shell .project-search-launch button {
+  min-height: var(--journal-compact-height);
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.learning-shell .project-run-history {
+  border-color: var(--journal-line);
+  background: var(--journal-sheet);
+}
+.learning-shell .project-message:not(.form-error) {
+  border-color: var(--journal-line);
+  background: var(--journal-blush);
+  color: var(--journal-ink) !important;
+}
+.learning-shell :is(.project-list-actions, .workspace-actions, .project-list-controls, .storage-action-row) {
+  align-items: center;
+  gap: 8px;
+}
+.learning-shell :is(.project-list-main, .workspace-main, .learning-studio) {
+  padding: var(--journal-page-top) var(--journal-content-gutter) 76px;
+}
+.learning-shell :is(.project-list-main, .learning-studio) { width: min(1240px, 100%); max-width: none; }
+.learning-shell .workspace-main { width: min(1540px, 100%); }
+.learning-shell :is(.project-heading h1, .learning-studio__heading h1) { margin-block: 0; }
+.learning-shell :is(.project-heading-row, .project-cards-heading) { align-items: center; }
+.learning-shell :is(.learning-studio__heading h1, .project-heading h1, .workspace-heading h1),
+.welcome.auth-page h1 {
+  color: var(--journal-deep) !important;
+  font-size: clamp(26px, 3.8vw, 43px);
+  line-height: 1.2;
+  letter-spacing: -.055em;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.learning-shell :is(.project-heading p, .learning-studio__heading p) { margin-top: 8px; }
+.learning-shell .empty-projects {
+  padding: clamp(20px, 4vw, 36px);
+  border: 1px solid var(--journal-line);
+  background: var(--journal-sheet);
+}
+.learning-shell .project-overview-intro {
+  align-items: start;
+  flex-wrap: wrap;
+}
+.learning-shell .project-overview-intro > div { flex: 1 1 220px; }
+.learning-shell .project-overview-intro > div > p:last-child { margin-top: 7px; }
+
+.learning-shell .primary-button,
+.learning-shell .learning-studio button.learning-studio__primary,
+.auth-page .primary-button {
+  border-color: var(--journal-wine);
+  background: var(--journal-wine);
+  color: #fff;
+}
+.learning-shell .primary-button:hover:not(:disabled),
+.learning-shell .learning-studio button.learning-studio__primary:hover:not(:disabled),
+.auth-page .primary-button:hover:not(:disabled) { background: var(--journal-deep); }
+.learning-shell :is(.project-card, .project-create-form, .workspace-grid, .project-storage-hub, .project-task-board, .project-overview-hero, .project-overview-panel, .project-overview-readme, .project-overview-progress-summary, .project-overview-deadlines, .project-overview-stats button, .editor-panel, .storage-provider-card) {
+  border-color: var(--journal-line);
+  background: var(--journal-sheet);
+  box-shadow: var(--journal-shadow);
+}
+.learning-shell :is(.editor-tabs, .editor-tab, .editor-toolbar, .editor-statusbar, .workspace-section-nav, .project-task-column) {
+  border-color: var(--journal-line);
+  background: var(--journal-paper);
+}
+.learning-shell .workspace-section-nav button.is-active { border-color: #dcbcc6; background: var(--journal-blush); }
+.learning-shell .project-overview-meta { border-color: var(--journal-line); background: var(--journal-paper); }
+.learning-shell .project-overview-stats button > span { justify-self: start; background: var(--journal-blush); }
+.learning-shell .project-task-board .project-task-column { border-color: var(--journal-line); background: var(--journal-paper); }
+.learning-shell .editor-tab.active { border-top-color: var(--journal-wine); background: var(--journal-sheet); }
+.learning-shell :is(.project-card:hover, .storage-provider-card:hover) { border-color: #bc889a; background: var(--journal-sheet); }
+.learning-shell :is(.secondary-button, .plain-link-button, .back-link) { color: var(--journal-wine) !important; }
+.learning-shell .secondary-button { border-color: var(--journal-line); background: var(--journal-sheet); }
+.learning-shell .secondary-button:hover:not(:disabled) { border-color: #bc889a; background: var(--journal-blush); }
+.learning-shell :is(.project-overview-progress-track span, .project-setup-progress span) { background: var(--journal-wine); }
+.auth-page .brand-mark { background: var(--journal-blush); color: var(--journal-wine); }
+.auth-page :is(.eyebrow, .auth-home-link, .switch-mode button) { color: var(--journal-wine); }
+.auth-page .auth-form input { background: var(--journal-sheet); border-color: var(--journal-line); }
+.auth-page .auth-form input:focus { border-color: #bc889a; box-shadow: 0 0 0 3px var(--journal-blush); }
+.learning-shell :is(button, input, select, textarea, summary, a):focus-visible,
+.auth-page :is(button, input):focus-visible,
+.landing-minimal :is(button, a):focus-visible {
+  outline: 2px solid var(--journal-wine);
+  outline-offset: 3px;
+}
+
+.github-import-access { margin-top: 12px; padding: 10px 0 0; border-top: 1px solid var(--journal-line); }
+.github-import-access summary { cursor: pointer; font-size: 13px; font-weight: 650; }
+.github-import-access p { font-size: 13px; line-height: 1.5; }
+.github-import-access label { display: grid; gap: 5px; margin-bottom: 10px; font-size: 13px; }
+.github-import-access input {
+  width: min(100%, 360px);
+  min-height: var(--journal-control-height);
+  padding: 8px 12px;
+  border: 1px solid var(--journal-line);
+  border-radius: 8px;
+  background: var(--journal-sheet);
+  color: var(--journal-ink);
+}
+
+.journal-connection { min-width: 0; margin: 0; }
+.journal-connection img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 2.65;
+  object-fit: cover;
+  mix-blend-mode: multiply;
+}
+.journal-connection figcaption {
+  display: grid;
+  grid-template-columns: 1.08fr .95fr .83fr;
+  gap: 5px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--journal-muted);
+}
+.journal-connection figcaption span { padding: 5px 2px; }
+.learning-shell .journal-connection figcaption .is-active {
+  background: var(--journal-blush);
+  color: var(--journal-wine) !important;
+  border-radius: 6px;
+}
+
+.learning-shell .learning-studio .learning-home__continue,
+.learning-shell .learning-studio .learning-home__units > section,
+.learning-shell .learning-studio .learning-path {
+  border-color: var(--journal-line);
+  background: var(--journal-sheet);
+  box-shadow: var(--journal-shadow);
+}
+.learning-shell .learning-studio .learning-home__continue { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(100px, .38fr); }
+.learning-shell .learning-studio button.learning-home__mission { border-bottom-color: var(--journal-line); }
+.learning-shell .learning-studio .learning-home__nav button {
+  border-color: var(--journal-line);
+  background: var(--journal-sheet);
+}
+.learning-shell .learning-studio .learning-home__nav button:hover:not(:disabled) { background: var(--journal-blush); }
+.learning-shell .learning-studio .learning-home__nav button[aria-current="page"] { background: var(--journal-blush); border-color: #dcbcc6; color: var(--journal-deep); }
+.learning-studio .learning-home__progress progress, .journal-studio progress { accent-color: var(--journal-wine); }
+.learning-shell .learning-studio .learning-path__levels label.is-selected { border-color: #ba8e9d; background: var(--journal-blush); }
+.learning-shell .learning-studio .learning-path__recommendation { border-left-color: #b68394; }
+.learning-shell .learning-studio :is(input[type="radio"], input[type="checkbox"]) { accent-color: var(--journal-wine); }
+
+.learning-shell .journal-studio {
+  width: min(1540px, 100%);
+  padding: 12px var(--journal-content-gutter) 56px;
+}
+.journal-studio__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+.journal-studio__bar nav { display: flex; flex-wrap: wrap; gap: 6px; }
+.learning-shell .journal-studio__bar button {
+  min-height: 34px;
+  padding-block: 6px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--journal-wine);
+}
+.journal-studio__progress { display: grid; gap: 3px; font-size: 12px; justify-items: end; }
+.journal-studio__progress progress { width: clamp(95px, 16vw, 232px); height: 7px; }
+.learning-shell .journal-studio .learning-studio__layout {
+  grid-template-columns: minmax(250px, 28%) minmax(0, 1fr);
+  align-items: start;
+  gap: clamp(12px, 1.4vw, 24px);
+}
+.learning-shell .journal-studio .journal-notebook {
+  display: grid;
+  position: sticky;
+  top: 80px;
+  max-height: calc(100svh - 92px);
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #cbadb7 transparent;
+  gap: 5px;
+  border: 1px solid var(--journal-line);
+  border-radius: 14px;
+  padding: 23px 18px 18px 25px;
+  background: linear-gradient(90deg, #f5e8e9, #fffcfa 20px);
+  box-shadow: var(--journal-shadow);
+}
+.journal-notebook__intro h1 {
+  margin: 0;
+  font-size: clamp(21px, 2vw, 31px);
+  line-height: 1.35;
+  letter-spacing: -.045em;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.learning-shell .journal-notebook .journal-notebook__intro h1 { color: var(--journal-deep) !important; }
+.journal-notebook__intro p { margin: 9px 0 14px; font-size: 14px; }
+.journal-notebook__intro .journal-connection { margin: 17px 0 14px; }
+.learning-shell .journal-notebook details {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-top: 1px solid var(--journal-line);
+}
+.learning-shell .journal-notebook details > summary { font-size: 13px; font-weight: 650; }
+.journal-notebook :is(p, ol) { font-size: 13px; }
+.journal-notebook .learning-help p[role="status"] { white-space: pre-wrap; }
+.journal-notebook .learning-studio__course-menu section { margin-block: 12px; }
+.journal-notebook .learning-path__mode { margin: 0; background: transparent; }
+.journal-studio .journal-lesson-list { margin: 12px 0; }
+.learning-shell .journal-studio .journal-lesson-list button {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  padding: 8px;
+  border: 0;
+  font-size: 13px;
+  background: transparent;
+}
+.journal-lesson-list button small { display: block; font-size: 11px; }
+.learning-shell .journal-lesson-list button[aria-current="step"],
+.learning-shell .journal-notebook .learning-studio__course-menu button[aria-current="step"] { background: var(--journal-blush); border-color: #dcbcc6; }
+.learning-shell .journal-lesson-list__mark {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #cba8b4;
+  border-radius: 50%;
+  color: var(--journal-wine) !important;
+}
+
+.journal-workspace { min-width: 0; }
+.journal-phases {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 10px;
+  border: 1px solid var(--journal-line);
+  border-radius: 10px;
+  background: var(--journal-sheet);
+}
+.learning-shell .journal-phases button {
+  min-height: 36px;
+  border-color: transparent;
+  background: transparent;
+  font-weight: 650;
+}
+.learning-shell .journal-phases button[aria-current="step"] {
+  border-color: #dcbcc6;
+  background: var(--journal-blush);
+  color: var(--journal-wine);
+}
+.journal-phases button small { margin-left: 5px; font-size: 11px; }
+.journal-phase-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.journal-workspace [id^="lesson-phase-"] { scroll-margin-top: calc(var(--site-header-height) + 44px); }
+.learning-shell .journal-workspace .journal-question { margin: 16px 0; }
+.journal-question legend { font-weight: 650; margin-bottom: 5px; }
+.journal-question label:has(input:checked), .learning-studio__choice:has(input:checked) {
+  border-color: #bf8599;
+  background: var(--journal-blush);
+}
+.journal-practice__instruction {
+  margin: 0 0 9px;
+  padding: 10px 13px;
+  border-left: 3px solid #ad6078;
+  border-radius: 0 7px 7px 0;
+  background: var(--journal-blush);
+  font-size: 14px;
+}
+.journal-practice > .learning-studio__field { margin-top: 13px; }
+.journal-practice > .learning-studio__field:first-of-type { margin-top: 0; }
+.journal-editor {
+  overflow: hidden;
+  border: 1px solid var(--journal-line);
+  border-radius: 12px;
+  background: var(--journal-sheet);
+  box-shadow: var(--journal-shadow);
+}
+.journal-editor__bar, .journal-editor__tabs { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.journal-editor__bar { min-height: 49px; justify-content: space-between; padding: 5px 8px; border-bottom: 1px solid var(--journal-line); }
+.journal-editor__file { padding: 0 9px; font: 600 13px Consolas, monospace; }
+.learning-shell .journal-editor__tabs button {
+  min-height: var(--journal-compact-height);
+  font: 600 13px Consolas, monospace;
+  border: 1px solid transparent;
+  background: transparent;
+}
+.learning-shell .journal-editor__tabs button[aria-pressed="true"] { background: var(--journal-blush); color: var(--journal-deep); border-color: #dcbcc6; }
+.learning-shell .journal-editor .learning-html-exercise__editor {
+  height: clamp(246px, 39vh, 450px);
+  border: 0;
+  border-radius: 0;
+  background: var(--journal-code);
+}
+.journal-editor .learning-html-exercise__editor > p { color: #f3eded !important; padding: 0 14px; }
+.journal-editor__more, .journal-workspace__more { margin: 8px 0; padding-inline: 2px; }
+.journal-workspace__more { border-top: 1px solid var(--journal-line); margin-top: 18px; }
+
+.learning-shell .journal-result-placeholder,
+.learning-shell .journal-studio .learning-js-report {
+  margin: 12px 0;
+  padding: 13px 16px;
+  border: 1px solid var(--journal-line);
+  border-radius: 12px;
+  background: var(--journal-sheet);
+  box-shadow: var(--journal-shadow);
+}
+.journal-result-placeholder { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; font-size: 13px; }
+.learning-shell .journal-studio .journal-result-placeholder > strong,
+.learning-shell .journal-studio .learning-js-report .journal-result__bar h4 { color: var(--journal-wine) !important; }
+.journal-result-placeholder { justify-content: space-between; }
+.journal-result__bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.journal-result__bar .learning-result-close { margin: 0; }
+.journal-studio .learning-js-report h4 { margin: 0; }
+.journal-studio .learning-js-report h4 small { margin-left: 8px; }
+.journal-studio .learning-js-report h5 { font-size: 14px; margin: 10px 0 2px; }
+.journal-studio .learning-js-report iframe { height: 265px; }
+.learning-shell .journal-studio .learning-react-snapshot { background: var(--journal-paper); border-color: var(--journal-line); }
+.learning-shell .journal-studio .learning-js-report pre { background: #f7f0f1; color: var(--journal-ink); }
+.learning-shell .journal-studio .learning-html-checks li,
+.learning-shell .journal-studio .learning-studio__choice { border-color: var(--journal-line); background: var(--journal-sheet); }
+.learning-shell .journal-studio .learning-studio__feedback { border-color: var(--journal-line); background: var(--journal-sheet); }
+
+@media (max-width: 760px) {
+  .learning-shell .project-heading-row { align-items: stretch; }
+  .learning-shell .project-list-controls { justify-content: flex-start; }
+  .learning-shell .project-list-controls label { flex: 1 1 135px; }
+  .learning-shell .project-list-controls :is(input, select) { width: 100%; }
+  .learning-shell .learning-studio .learning-home__continue,
+  .learning-shell .journal-studio .learning-studio__layout { grid-template-columns: minmax(0, 1fr); }
+  .journal-home__figure { max-width: 400px; }
+  .learning-shell .journal-studio .journal-notebook {
+    grid-row: 1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    position: static;
+    max-height: none;
+    padding: 12px;
+    gap: 3px 10px;
+  }
+  .journal-notebook > :is(.journal-notebook__intro, details[open]) { grid-column: 1 / -1; }
+  .learning-shell .journal-studio .journal-workspace { grid-row: 2; }
+  .journal-notebook__intro .journal-connection { max-width: 215px; margin: 8px auto; }
+  .journal-notebook .journal-lesson-list { display: none; }
+  .journal-studio .journal-practice__instruction { font-size: 13px; }
+}
+
+@media (max-width: 620px) {
+  :root {
+    --site-header-gutter: 16px;
+    --site-header-height: 64px;
+  }
+  .learning-shell .learning-topbar .topbar-brand,
+  .auth-brand-bar .auth-home-link { font-size: 12px; }
+  .learning-shell .learning-topbar .account-menu > span { display: none; }
+  .learning-shell .learning-topbar .topbar-nav button { padding-inline: 6px; }
+  .learning-shell .learning-topbar { gap: 6px; }
+}
+
+@media (max-width: 360px) {
+  body { min-width: 0; }
+  .learning-shell .learning-topbar {
+    height: auto;
+    min-height: var(--site-header-height);
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 8px;
+    row-gap: 0;
+    padding-block: 0 6px;
+  }
+  .learning-shell .learning-topbar .topbar-brand { min-height: var(--site-header-height); }
+  .learning-shell .learning-topbar .topbar-nav { grid-column: 1 / -1; grid-row: 2; height: auto; }
+}

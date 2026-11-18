@@ -78,6 +78,29 @@ def test_required_transfer_keeps_code_but_not_optional_writing():
     assert guide_for("M05", "BEGINNER")["steps"] != guide_for("M05", "EXPERIENCED")["steps"]
 
 
+@pytest.mark.parametrize(("node_id", "field_id"), [("M11", "reproduction"), ("M12", "architecture_explanation")])
+def test_observation_questions_check_choices_and_accept_prior_written_work(client, node_id, field_id):
+    node = next(item for item in get_published_catalogue("WEB-FS-01")["missions"] if item["id"] == node_id)
+    assignment = assignments.new_assignment(node_id, "BEGINNER", 0)
+    question = next(field for field in assignments.fields_for_assignment(fields_for(node), assignment, node_id) if field["id"] == field_id)
+    assert question["kind"] == "choice"
+    concept = {"concept_answer": node["concept_check"]["answer"]}
+    assert evaluate(node, {**concept, field_id: question["choices"][1]}, reopened=True, fields=[question])["issues"][field_id]
+    assert evaluate(node, {**concept, field_id: question["correct_choice"]}, reopened=True, fields=[question])["passed"]
+
+    previous = "이전에 저장한 답안에는 실행 결과와 판단 근거를 구체적으로 기록했습니다."
+    saved_question = next(field for field in assignments.fields_for_assignment(fields_for(node), assignment, node_id, {field_id: previous}) if field["id"] == field_id)
+    assert not evaluate(node, {**concept, field_id: previous}, reopened=True, fields=[question])["passed"]
+    assert evaluate(node, {**concept, field_id: previous}, reopened=True, fields=[saved_question])["passed"]
+
+    base = register(client, f"{node_id.lower()}-choice@example.com")
+    details = client.get(f"{base}/nodes/{node_id}").json()
+    public_question = next(field for field in details["fields"] if field["id"] == field_id)
+    assert "correct_choice" not in public_question
+    response = client.put(f"{base}/nodes/{node_id}/work", json={"expected_version": 0, "answers": {field_id: previous}})
+    assert response.status_code == 422
+
+
 def test_upgrade_preserves_code_level_and_conflict_guards(client):
     base = register(client)
     node = client.get(base + "/nodes/M05").json()

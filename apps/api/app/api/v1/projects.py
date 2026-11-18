@@ -187,7 +187,7 @@ async def import_github_project(
     except project_service.GitHubRepositoryTooLarge as exc:
         raise HTTPException(status_code=413, detail="가져올 저장소 ZIP이 1.5MB를 넘습니다. 필요한 파일만 ZIP으로 내려받아 가져와 주세요.") from exc
     except project_service.GitHubRepositoryNotFound as exc:
-        raise HTTPException(status_code=422, detail="저장소 주소와 권한을 확인해 주세요. 비공개 저장소는 연결 앱에서 해당 저장소의 Contents 읽기 권한이 있는 GitHub 토큰을 연결해야 합니다.") from exc
+        raise HTTPException(status_code=422, detail="저장소 주소를 확인해 주세요. 비공개 저장소라면 가져오기 아래의 ‘비공개 저장소 읽기 권한’에서 토큰을 확인하세요.") from exc
     try:
         imported = project_service.import_project_archive(
             db,
@@ -271,7 +271,7 @@ async def pull_github_source_updates(
     try:
         access_token = github_connection_service.get_access_token(db, user)
         if not access_token and source.is_private:
-            raise HTTPException(status_code=409, detail="연결 앱에서 GitHub 토큰을 먼저 연결해 주세요.")
+            raise HTTPException(status_code=409, detail="저장 위치의 ‘비공개 저장소 읽기 권한’에서 GitHub 토큰을 연결해 주세요.")
         repository_url = f"https://github.com/{source.owner}/{source.repository}/tree/{quote(source.branch, safe='/')}"
         archive = await asyncio.to_thread(project_service.download_github_archive, repository_url, access_token)
         files = project_service.read_github_archive_files(archive.content)
@@ -477,7 +477,7 @@ def add_project_member(
     except project_service.ProjectOwnerRequired as exc:
         raise HTTPException(status_code=403, detail="프로젝트 소유자만 팀원을 관리할 수 있습니다.") from exc
     except project_service.ProjectUserNotFound as exc:
-        raise HTTPException(status_code=404, detail="해당 이메일로 가입한 WebLink 계정을 찾지 못했습니다.") from exc
+        raise HTTPException(status_code=404, detail="해당 이메일로 가입한 우리들의 개발일지 계정을 찾지 못했습니다.") from exc
     except project_service.ProjectMemberAlreadyExists as exc:
         raise HTTPException(status_code=409, detail="이미 이 프로젝트의 팀원입니다.") from exc
 

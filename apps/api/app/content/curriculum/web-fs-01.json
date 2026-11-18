@@ -936,7 +936,7 @@
       "prediction": "서버 프로세스를 다시 시작해도 파일 DB의 행은 남을까요?",
       "micro_practice": {
         "task": "한 번 저장한 글을 프로세스 재시작 후 다시 조회하세요.",
-        "expected_observation": "한 실행 안에서 서버를 재시작해도 SQLite 행이 유지됩니다. 연습 DB는 실행 종료 후 삭제되며 답안과 실행 기록은 WebLink에 저장됩니다."
+        "expected_observation": "한 실행 안에서 서버를 재시작해도 SQLite 행이 유지됩니다. 연습 DB는 실행 종료 후 삭제되며 답안과 실행 기록은 우리들의 개발일지에 저장됩니다."
       },
       "student_task": "M07의 입력 검증(문자열·trim·1~80자)을 유지하고, 메모리 목록을 /data/learning.db의 posts(id, title, content)로 바꾸세요. GET은 객체 배열, POST는 201과 저장 객체를 반환하세요. 실행기가 서버를 재시작한 뒤 GET과 DB 행을 다시 확인합니다.",
       "starter_workspace": "project/api",

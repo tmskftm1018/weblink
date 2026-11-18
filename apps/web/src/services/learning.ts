@@ -55,7 +55,7 @@ async function request<T>(path: string, body?: unknown, method?: string, signal?
     body: body === undefined ? undefined : JSON.stringify(body),
   }) } catch (cause) {
     if (signal?.aborted) throw cause
-    throw new LearningRequestError('WebLink 서버에 연결하지 못했어요. 작성 내용은 유지됩니다. 연결을 확인한 뒤 다시 시도해 주세요.', 0)
+    throw new LearningRequestError('우리들의 개발일지 서버에 연결하지 못했어요. 작성 내용은 유지됩니다. 연결을 확인한 뒤 다시 시도해 주세요.', 0)
   }
   if (!response.ok) {
     const payload = await response.json().catch(() => null) as { detail?: unknown } | null
@@ -115,7 +115,7 @@ export type LearningWork = {
 export type LearningNode = {
   id: string; title: string; objective: string; prediction: string; task: string; recovery: string
   practice: { task: string; expected_observation: string }; next_ids: string[]; foundation_ids: string[]; unlocked: boolean
-  fields: { id: string; label: string; kind: string; language?: string; filename?: string; run_field?: string; choices?: string[]; placeholder?: string; min_length?: number; optional?: boolean; practice_note?: boolean }[]
+  fields: { id: string; label: string; kind: string; language?: string; filename?: string; run_field?: string; choices?: string[]; placeholder?: string; min_length?: number; optional?: boolean; practice_note?: boolean; previous_response?: boolean }[]
   assignment: LearningAssignment
   project_handoffs?: { field: string; project_id: string | null; project_name: string | null; can_open: boolean; can_create: boolean; reason: string; source_changed: boolean }[]
   prerequisite_rechecks?: { id: string; title: string; reason: 'CHANGED' | 'INCOMPLETE'; can_open: boolean }[]

@@ -159,7 +159,7 @@ def node_details(db: Session, user: User, enrollment_id: UUID, node_id: str) -> 
     assignment = work.assignment if work else assignments.new_assignment(node_id, effective_level(enrollment, works.get("M01")), enrollment.path_version)
     transfer_code = CONTRACTS.get(node_id, {}).get("transfer_starter")
     if assignment:
-        starter_code, transfer_code, starter_files = assignments.starters(node_id, assignment["level"], starter_code, transfer_code, starter_files)
+        starter_code, transfer_code, starter_files = assignments.starters(node_id, assignment["level"], starter_code, transfer_code, starter_files, starter_revision=assignment.get("starter_revision"))
     if node_id == "M11" and works.get("M10"):
         previous = works["M10"].answers
         starter_code = previous.get("source", starter_code)
@@ -167,11 +167,14 @@ def node_details(db: Session, user: User, enrollment_id: UUID, node_id: str) -> 
                               "api_source": previous.get("api_source", starter_files["api_source"]),
                               "baseline_api_source": previous.get("api_source", starter_files["baseline_api_source"])})
     node = assignments.presentation(node, assignment)
+    fields = assignments.fields_for_assignment(fields_for(node), assignment, node_id, work.answers if work else None)
+    for field in fields:
+        field.pop("correct_choice", None)
     return {
         "id": node_id, "title": node["title"], "objective": node["objective"],
         "prediction": node["prediction"], "practice": node["micro_practice"],
         "task": node.get("student_task", node["micro_practice"]["task"]),
-        "recovery": node["recovery"], "fields": assignments.fields_for_assignment(fields_for(node), assignment, node_id),
+        "recovery": node["recovery"], "fields": fields,
         "assignment": assignments.describe(assignment, node_id, pinned=work is not None),
         "practice_guide": guide_for(node_id, assignment.get("level") if assignment else None),
         "project_handoffs": _project_handoffs(db, user, enrollment, work, node_id, completed),
@@ -200,6 +203,12 @@ def save_work(db: Session, user: User, enrollment_id: UUID, node_id: str, expect
     allowed = {field["id"] for field in fields} | {"concept_answer"}
     if not set(answers).issubset(allowed):
         raise HTTPException(422, "이 학습에서 사용하지 않는 작성 항목이 있습니다.")
+    for field in fields:
+        field_id = field["id"]
+        value = answers.get(field_id, "").strip()
+        previous = work.answers.get(field_id, "").strip() if work else ""
+        if field.get("correct_choice") and value and value not in field["choices"] and value != previous:
+            raise HTTPException(422, "실행을 확인하고 답안 보기에서 하나를 선택해 주세요.")
     digest = hashlib.sha256(json.dumps(answers, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     current_version = work.version if work else 0
     # A lost response can retry the exact payload; it must never overwrite a
@@ -251,7 +260,7 @@ def submit_work(db: Session, user: User, enrollment_id: UUID, node_id: str, expe
         raise HTTPException(409, "현재 저장본과 작성 버전이 다릅니다. 먼저 저장본을 확인해 주세요.")
     if not set(node.get("prerequisites", [])).issubset(_completed(catalogue, works)):
         raise HTTPException(409, "선수 미션을 먼저 확인해 주세요. 기존 작성 내용은 보존됩니다.")
-    fields = assignments.fields_for_assignment(fields_for(node), work.assignment, node_id)
+    fields = assignments.fields_for_assignment(fields_for(node), work.assignment, node_id, work.answers)
     result = evaluate(node, work.answers, reopened=work.retrieved_version == work.version,
                       fields=assignments.required_fields(fields, work.assignment, work.answers, node_id))
     result["assignment"] = assignments.describe(work.assignment, node_id, pinned=True)
